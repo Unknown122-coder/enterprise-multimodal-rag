@@ -109,3 +109,45 @@ class TestTuningConfig:
     def test_tenants_example_has_no_usable_hash(self) -> None:
         text = (CONFIG_DIR / "tenants.example.yaml").read_text(encoding="utf-8")
         assert "REPLACE_ME" in text
+
+
+class TestWarmUpGate:
+    """Background ingestion waits for start-up rather than competing with it."""
+
+    async def test_wait_returns_immediately_once_marked(self) -> None:
+        import asyncio
+        import time
+
+        from emrag.api.deps import AppState
+
+        state = AppState.__new__(AppState)
+        state.warm = False
+        state.warm_event = asyncio.Event()
+        state.mark_warm(ready=True)
+
+        started = time.perf_counter()
+        assert await state.wait_until_warm(timeout_s=5.0) is True
+        assert time.perf_counter() - started < 0.5
+
+    async def test_wait_reports_failed_start_up(self) -> None:
+        import asyncio
+
+        from emrag.api.deps import AppState
+
+        state = AppState.__new__(AppState)
+        state.warm = False
+        state.warm_event = asyncio.Event()
+        # A warm-up that failed must still release waiters, so a queued upload
+        # fails fast instead of sitting behind something that will never finish.
+        state.mark_warm(ready=False)
+        assert await state.wait_until_warm(timeout_s=5.0) is False
+
+    async def test_wait_times_out_rather_than_hanging(self) -> None:
+        import asyncio
+
+        from emrag.api.deps import AppState
+
+        state = AppState.__new__(AppState)
+        state.warm = False
+        state.warm_event = asyncio.Event()
+        assert await state.wait_until_warm(timeout_s=0.05) is False

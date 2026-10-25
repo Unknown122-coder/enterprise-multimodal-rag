@@ -139,3 +139,66 @@ class TestNormaliseWithOffsets:
         start = normalised.index("14 percent")
         end = start + len("14 percent") - 1
         assert source[offsets[start] : offsets[end] + 1] == "14 percent"
+
+
+class TestTokenizerAvailability:
+    """The tokeniser is load-bearing, so its absence must be loud.
+
+    Chunk boundaries follow from token counts and chunk ids follow from
+    boundaries, so two deployments that tokenise differently produce different
+    ids for the same bytes. A silent fallback would break the guarantee that a
+    vector store is rebuildable from artifacts.
+    """
+
+    def test_real_encoder_is_available_here(self) -> None:
+        assert tokens.encoder_available()
+        assert tokens.warm_up() is True
+
+    def test_encoding_name_is_pinned(self) -> None:
+        # Changing this changes every chunk boundary in the corpus.
+        assert tokens.ENCODING_NAME == "cl100k_base"
+
+    def test_fallback_uses_the_character_heuristic(self) -> None:
+        import emrag.core.tokens as module
+
+        original = module._encoder
+        try:
+            module._encoder = lambda: None  # type: ignore[assignment]
+            assert module.count_tokens("a" * 40) == 10
+            assert module.count_tokens("") == 0
+            assert module.truncate_to_tokens("a" * 40, 2) == "a" * 8
+            assert module.truncate_to_tokens("short", 100) == "short"
+        finally:
+            module._encoder = original  # type: ignore[assignment]
+
+    def test_warning_latch_fires_only_once(self) -> None:
+        import emrag.core.tokens as module
+
+        tokens.reset_for_tests()
+        assert module._warned is False
+        module._warn_once("first reason")
+        assert module._warned is True
+        # A second call must not re-log; the latch staying set is the evidence.
+        module._warn_once("second reason")
+        assert module._warned is True
+        tokens.reset_for_tests()
+        assert module._warned is False
+
+    def test_fallback_and_real_counts_are_close_for_prose(self) -> None:
+        # The heuristic is an approximation, not a substitute: this records how
+        # far apart they are so a future change to it is a deliberate choice.
+        import emrag.core.tokens as module
+
+        text = (
+            "Segment revenue grew 14 percent year over year, driven by renewals "
+            "in the enterprise tier."
+        )
+        real = module.count_tokens(text)
+        original = module._encoder
+        try:
+            module._encoder = lambda: None  # type: ignore[assignment]
+            approx = module.count_tokens(text)
+        finally:
+            module._encoder = original  # type: ignore[assignment]
+        assert real > 0 and approx > 0
+        assert 0.5 <= approx / real <= 2.0

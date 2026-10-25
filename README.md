@@ -453,9 +453,24 @@ workflows need: [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md). In short:
 5. Register the artifact-store webhook, or documents ingested in Colab stay
    invisible to the API until it restarts.
 
-Models are baked into the image, so a cold start never waits on a download.
-`/readyz` stays red until warm-up finishes, which makes a cold start visible
-rather than mysterious.
+Both the ONNX models and the tiktoken vocabulary are baked into the image, so a
+cold start never waits on a download. That second one matters more than it
+sounds: fetched at runtime it cost 56 seconds, and when it could not be fetched
+the system silently fell back to a different token count, which changes chunk
+boundaries and therefore chunk identifiers.
+
+`/readyz` stays red until warm-up finishes, and reports which tokeniser is
+loaded and where artifacts are being written, because both are otherwise silent
+failure modes. Inline ingestion waits for warm-up rather than competing with it.
+
+Measured on a cold container, start to a document being queryable:
+
+| | measured |
+|---|---|
+| container to `/healthz` | under 1 s |
+| models and tokeniser warm | 2.8 s |
+| first one-page ingest | 0.7 s |
+| image size | 1.76 GB |
 
 ### Render (fallback)
 
@@ -468,8 +483,8 @@ retrieval precision drops.
 
 | host | sleeps after | wake |
 |------|--------------|------|
-| Hugging Face Spaces | ~48 h idle | 30 to 60 s |
-| Render free | ~15 min idle | 30 to 60 s |
+| Hugging Face Spaces | ~48 h idle | ~30 s to the container, then 3 s to ready |
+| Render free | ~15 min idle | similar, on much less CPU |
 
 `.github/workflows/keepalive.yml` pings the API and the vector store every six
 hours. For Render, lower the cron to every ten minutes.

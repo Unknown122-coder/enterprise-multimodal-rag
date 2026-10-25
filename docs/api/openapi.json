@@ -2203,6 +2203,10 @@
             "type": "string",
             "title": "Rerank Model"
           },
+          "tokenizer": {
+            "type": "string",
+            "title": "Tokenizer"
+          },
           "models": {
             "additionalProperties": {
               "items": {
@@ -2225,6 +2229,7 @@
           "embed_model",
           "sparse_model",
           "rerank_model",
+          "tokenizer",
           "models"
         ],
         "title": "MetaResponse",

@@ -689,7 +689,7 @@ enterprise-multimodal-rag/
 ### 10.2 Dockerfile strategy
 
 - Base `python:3.11-slim`; multi-stage: builder installs with `uv` into a venv; runtime copies venv only.
-- **Models baked at build**: fastembed downloads `bge-base-en-v1.5`, `Qdrant/bm25`, `ms-marco-MiniLM-L-6-v2` into `/app/models` (`FASTEMBED_CACHE_PATH`), so cold start does not hit the network (~600 MB layer, cached).
+- **Models baked at build**: fastembed downloads `bge-base-en-v1.5`, `Qdrant/bm25`, `ms-marco-MiniLM-L-6-v2` into `/app/models` (`FASTEMBED_CACHE_PATH`), so cold start does not hit the network (~310 MB layer, cached). **Implementation note:** the tiktoken vocabulary must be baked too (`TIKTOKEN_CACHE_DIR`). Left to fetch at runtime it cost 56 s on first use, and when unreachable it fell back silently to a character heuristic, changing chunk boundaries and therefore chunk ids. Measured image size is 1.76 GB, not the ~600 MB this line originally implied.
 - Non-root user; `PORT=7860` (HF) with `UVICORN_WORKERS=1` (single process, async; rerank in a threadpool); `HEALTHCHECK` on `/healthz`.
 - `docker-compose.yml` adds local `qdrant/qdrant` for integration tests.
 

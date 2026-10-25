@@ -250,7 +250,9 @@ def app_state(settings: Settings, scripted_provider: ScriptedProvider) -> Iterat
     )
     state.retriever._router = state.router
     state.answerer._router = state.router
-    state.warm = True
+    # The real lifespan is bypassed here, so release the warm-up gate that
+    # background ingestion waits on. Forgetting this stalls every upload test.
+    state.mark_warm(ready=True)
     yield state
 
 

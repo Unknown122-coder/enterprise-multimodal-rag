@@ -8,7 +8,8 @@ the retrieval filter.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
@@ -55,9 +56,36 @@ class AppState:
     pipeline: IngestionPipeline
     lite: LitePipeline
     warm: bool = False
+    # Set once start-up finishes, successfully or not, so background work can
+    # wait rather than compete with model loading for the host's two vCPUs.
+    warm_event: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def wait_until_warm(self, timeout_s: float = 120.0) -> bool:
+        """Block until start-up has finished, or the timeout elapses.
+
+        Inline ingestion that starts during warm-up competes with three ONNX
+        models being loaded, which on a free-tier host turns a sub-second parse
+        into roughly a minute. Waiting first is markedly faster overall and
+        reports an honest ``processing`` status while it waits.
+        """
+        if self.warm_event.is_set():
+            return self.warm
+        logger.info("app.waiting_for_warm_up", timeout_s=timeout_s)
+        try:
+            await asyncio.wait_for(self.warm_event.wait(), timeout=timeout_s)
+        except TimeoutError:
+            logger.warning("app.warm_wait_timeout", timeout_s=timeout_s)
+            return False
+        return self.warm
+
+    def mark_warm(self, *, ready: bool) -> None:
+        """Record the outcome of start-up and release anything waiting on it."""
+        self.warm = ready
+        self.warm_event.set()
 
     async def aclose(self) -> None:
         """Release every resource held by the application."""
+        self.warm_event.set()
         await self.router.aclose()
         await self.store.aclose()
 

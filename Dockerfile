@@ -14,32 +14,46 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-deps .
 
-# Pre-download ONNX model weights into the image layer.
-ENV FASTEMBED_CACHE_PATH=/opt/models
-RUN mkdir -p /opt/models && python - <<'PY'
-from fastembed import TextEmbedding, SparseTextEmbedding
+# Pre-download every model weight and vocabulary into the image layer, so a cold
+# start never touches the network. The tiktoken vocabulary matters as much as the
+# ONNX models: fetching it at runtime costs about a minute on a free-tier host,
+# and failing to fetch it silently changes chunk boundaries and therefore chunk
+# ids. See the module docstring in emrag/core/tokens.py.
+ENV FASTEMBED_CACHE_PATH=/opt/models \
+    TIKTOKEN_CACHE_DIR=/opt/tiktoken
+RUN mkdir -p /opt/models /opt/tiktoken && python - <<'PY'
+import tiktoken
+from fastembed import SparseTextEmbedding, TextEmbedding
 from fastembed.rerank.cross_encoder import TextCrossEncoder
+
 TextEmbedding("BAAI/bge-base-en-v1.5", cache_dir="/opt/models")
 SparseTextEmbedding("Qdrant/bm25", cache_dir="/opt/models")
 TextCrossEncoder("Xenova/ms-marco-MiniLM-L-6-v2", cache_dir="/opt/models")
-print("models cached")
+assert tiktoken.get_encoding("cl100k_base").encode("warm up"), "tokeniser not cached"
+print("models and tokeniser cached")
 PY
 
 FROM python:3.11-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     FASTEMBED_CACHE_PATH=/app/models \
+    TIKTOKEN_CACHE_DIR=/app/.cache/tiktoken \
     HF_HOME=/app/.cache/hf \
     PORT=7860
 RUN apt-get update && apt-get install -y --no-install-recommends curl libgomp1 && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m -u 1000 emrag
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /opt/models /app/models
+# Ownership is set during the COPY. A later `chown -R /app` would rewrite every
+# file's metadata and so duplicate the whole 300 MB model directory into a new
+# layer, which cost more than the models themselves.
+COPY --from=builder --chown=emrag:emrag /opt/models /app/models
+COPY --from=builder --chown=emrag:emrag /opt/tiktoken /app/.cache/tiktoken
 WORKDIR /app
 COPY --chown=emrag:emrag configs ./configs
 COPY --chown=emrag:emrag scripts ./scripts
-RUN mkdir -p /app/var /app/.cache/hf && chown -R emrag:emrag /app
+# Only these two are created here, and the chown is not recursive.
+RUN mkdir -p /app/var /app/.cache/hf && chown emrag:emrag /app /app/var /app/.cache/hf
 USER emrag
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \

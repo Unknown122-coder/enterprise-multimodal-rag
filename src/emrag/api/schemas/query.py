@@ -173,4 +173,5 @@ class MetaResponse(BaseModel):
     embed_model: str
     sparse_model: str
     rerank_model: str
+    tokenizer: str
     models: dict[str, list[str]]

@@ -37,7 +37,21 @@ class TestOps:
 
     def test_readyz_reports_checks(self, client: Any) -> None:
         body = client.get("/readyz").json()
-        assert set(body["checks"]) == {"models", "store", "registry", "llm"}
+        assert set(body["checks"]) == {"models", "tokenizer", "store", "registry", "llm"}
+
+    def test_readyz_surfaces_the_tokenizer_and_artifact_root(self, client: Any) -> None:
+        # Both are silent failure modes: a fallback tokeniser changes chunk
+        # boundaries, and a mis-set artifact root looks healthy while writing
+        # nowhere useful. Readiness names them so an operator can see them.
+        detail = client.get("/readyz").json()["detail"]
+        assert detail["tokenizer"] in ("cl100k_base", "fallback-heuristic")
+        assert detail["artifact_root"]
+
+    def test_meta_reports_the_tokenizer(self, client: Any) -> None:
+        assert client.get("/v1/meta").json()["tokenizer"] in (
+            "cl100k_base",
+            "fallback-heuristic",
+        )
 
     def test_meta_lists_models_and_backend(self, client: Any) -> None:
         body = client.get("/v1/meta").json()

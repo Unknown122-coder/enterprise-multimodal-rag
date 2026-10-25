@@ -111,6 +111,17 @@ curl -sS https://<host>/readyz    # ready:true only once the models are warm
 curl -sS https://<host>/v1/meta   # check `models` lists a model for each tier
 ```
 
+Check three things in `/readyz`, each a silent failure mode:
+
+- `checks.tokenizer` must be true and `detail.tokenizer` must read
+  `cl100k_base`. A `fallback-heuristic` value means the tiktoken vocabulary is
+  missing, which changes chunk boundaries and so chunk ids. Documents ingested
+  in that state are not interchangeable with ones ingested correctly.
+- `detail.artifact_root` must be the path or repository you intended. A
+  mis-set root is writable and therefore looks healthy while storing artifacts
+  somewhere useless.
+- `detail.points` and `detail.documents` should agree with what you expect.
+
 `/v1/meta` showing an empty `models` object means no provider key reached the
 container. That is the most common first-deploy mistake, and it surfaces as
 `MODEL_UNAVAILABLE` on the first query rather than as a startup failure, because

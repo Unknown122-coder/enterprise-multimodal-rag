@@ -142,8 +142,14 @@ async def upload_document(
 
 
 async def _run_lite(state: object, request: IngestRequest) -> None:
-    """Background task wrapper that never lets an exception escape."""
+    """Background task wrapper that never lets an exception escape.
+
+    Waits for start-up to finish first. Parsing while three ONNX models load on
+    two shared vCPUs turns a sub-second ingest into roughly a minute, which is
+    what a user's first upload after a free-tier cold start would otherwise hit.
+    """
     try:
+        await state.wait_until_warm()  # type: ignore[attr-defined]
         await state.lite.run(request)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001 - job status already records the failure
         logger.error("documents.lite_failed", doc_id=request.doc_id, error=str(exc)[:300])

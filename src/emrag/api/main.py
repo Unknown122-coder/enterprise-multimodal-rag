@@ -22,6 +22,7 @@ from emrag.api.middleware.ratelimit import build_limiter, register_rate_limiting
 from emrag.api.middleware.request_id import RequestIdMiddleware
 from emrag.api.middleware.security_headers import SecurityHeadersMiddleware
 from emrag.api.routers import documents, health, internal, jobs, query, retrieve, usage
+from emrag.core import tokens
 from emrag.observability.logging import configure_logging, get_logger
 from emrag.observability.tracing import configure_tracing
 from emrag.settings import Settings, get_settings
@@ -115,19 +116,26 @@ async def _warm_up(state: AppState) -> None:
         logger.warning("app.registry_sync_failed", error=str(exc)[:200])
 
     try:
+        # The tokeniser first: it decides chunk boundaries, and loading it
+        # lazily in a request would cost about a minute on a cold host.
+        tokenizer_ready = await asyncio.to_thread(tokens.warm_up)
         await asyncio.to_thread(state.embedder.warm_up)
         reranker = getattr(state.retriever, "_reranker", None)
         if reranker is not None:
             await asyncio.to_thread(reranker.warm_up)
-        state.warm = True
+        state.mark_warm(ready=True)
         logger.info(
             "app.ready",
             version=__version__,
             backend=state.settings.vector_backend,
             embed_model=state.embedder.model_name,
+            tokenizer=tokens.ENCODING_NAME if tokenizer_ready else "fallback-heuristic",
             tiers=sorted(state.router.models_by_tier()),
         )
     except Exception as exc:  # noqa: BLE001
+        # Release waiters even on failure: a queued upload should fail fast
+        # rather than sit behind a warm-up that will never complete.
+        state.mark_warm(ready=False)
         logger.error("app.warm_up_failed", error=str(exc)[:300])
 
 
