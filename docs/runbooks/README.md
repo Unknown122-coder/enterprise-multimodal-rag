@@ -2,6 +2,7 @@
 
 | runbook | when |
 |---------|------|
+| [deploy.md](deploy.md) | standing the system up for the first time |
 | [ingest-run.md](ingest-run.md) | processing a batch of documents |
 | [rebuild-vector-store.md](rebuild-vector-store.md) | the cluster was suspended, deleted, or counts disagree |
 | [migrate-store.md](migrate-store.md) | moving between Qdrant and Pinecone |

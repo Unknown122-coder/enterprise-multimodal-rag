@@ -1,0 +1,134 @@
+# Runbook: first deployment
+
+**Time** about 40 minutes, most of it waiting for accounts and the first image
+build.
+
+Order matters: the artifact store and vector store must exist before the service
+starts, or it comes up with an empty registry and a missing collection.
+
+## 1. Provision
+
+Follow the account setup in the README, then confirm each one works before
+moving on:
+
+```bash
+python scripts/bootstrap_store.py      # creates the collection and payload indexes
+```
+
+That is the only step that fails loudly on a bad Qdrant URL or key, so do it
+first.
+
+## 2. Issue credentials
+
+```bash
+python scripts/make_api_key.py --tenant acme --role writer --group finance
+python scripts/make_api_key.py --tenant acme --role reader
+```
+
+Collect the tenant records into a JSON array and keep it for step 4. Only the
+Argon2 hashes are stored; the plaintext keys are shown once.
+
+## 3. Verify the published limits
+
+`configs/providers.yaml` ships indicative figures. Open each provider console,
+confirm the current requests-per-minute, tokens-per-minute and daily limits, and
+edit the file. Nothing else in the system reads a rate limit, so this file being
+wrong is the single most likely cause of unexpected 429s.
+
+## 4. Host secrets (Hugging Face Space)
+
+Create a **Docker** Space, then add these under Settings, Variables and secrets.
+
+Secrets:
+
+| secret | value |
+|--------|-------|
+| `QDRANT_URL` | free cluster endpoint |
+| `QDRANT_API_KEY` | free cluster key |
+| `GROQ_API_KEY` | from console.groq.com |
+| `GEMINI_API_KEY` | from aistudio.google.com/apikey |
+| `HF_TOKEN` | write token for the dataset repo |
+| `HF_WEBHOOK_SECRET` | any long random string you generate |
+| `TENANTS_JSON` | the array from step 2 |
+| `JWT_HS256_SECRET` | only if you issue JWTs |
+
+Public variables:
+
+| variable | value |
+|----------|-------|
+| `APP_ENV` | `prod` |
+| `ALLOW_DEV_ANON` | `false` |
+| `ARTIFACT_BACKEND` | `hf` |
+| `HF_DATASET_REPO` | e.g. `your-org/emrag-store` |
+
+`APP_ENV=prod` refuses to start without tenants configured, anonymous access
+disabled and at least one LLM key, so a half-configured Space fails fast rather
+than serving unauthenticated.
+
+## 5. GitHub secrets and variables
+
+The workflows need their own copies. Repository Settings, Secrets and variables,
+Actions.
+
+Secrets:
+
+| secret | used by |
+|--------|---------|
+| `HF_TOKEN` | deploy, nightly evaluation |
+| `QDRANT_URL`, `QDRANT_API_KEY` | keepalive |
+| `QDRANT_URL_STAGING`, `QDRANT_API_KEY_STAGING` | nightly evaluation |
+| `GROQ_API_KEY`, `GEMINI_API_KEY` | nightly evaluation |
+| `TENANTS_JSON_STAGING` | nightly evaluation |
+
+Variables:
+
+| variable | used by | example |
+|----------|---------|---------|
+| `HF_SPACE` | deploy | `your-org/emrag` |
+| `PUBLIC_API_URL` | keepalive | `https://your-org-emrag.hf.space` |
+| `HF_DATASET_REPO_STAGING` | nightly evaluation | `your-org/emrag-store-staging` |
+
+`GITHUB_TOKEN` is provided automatically. The nightly evaluation is the only
+workflow that spends provider quota; if you do not want that, disable it rather
+than leaving its secrets unset, so the failure is deliberate.
+
+## 6. Deploy
+
+```bash
+git tag v1.0.0 && git push --tags
+```
+
+The deploy workflow pushes the tree to the Space, swaps in the Space README
+front matter, and polls `/healthz` for up to fifteen minutes. The first build is
+slow because the image downloads and bakes three ONNX models; later builds reuse
+the layer.
+
+## 7. Confirm
+
+```bash
+curl -sS https://<host>/healthz
+curl -sS https://<host>/readyz    # ready:true only once the models are warm
+curl -sS https://<host>/v1/meta   # check `models` lists a model for each tier
+```
+
+`/v1/meta` showing an empty `models` object means no provider key reached the
+container. That is the most common first-deploy mistake, and it surfaces as
+`MODEL_UNAVAILABLE` on the first query rather than as a startup failure, because
+retrieval still works without a model.
+
+Then ingest one document and ask one question you know the answer to. A verified
+citation pointing at the right page is the only proof that the whole chain works.
+
+## 8. Register the webhook
+
+In the dataset repository settings, add a webhook to
+`https://<host>/v1/internal/hf-webhook` with the `HF_WEBHOOK_SECRET` as the
+`X-Webhook-Secret` header. Without it the API only refreshes its document
+registry on restart, so documents ingested in Colab stay invisible until then.
+
+## Rollback
+
+The Space keeps its build history: revert to the previous build in the Space UI,
+or push an earlier tag. Nothing in a deployment migrates data, so a rollback is
+safe. The one exception is a collection rename, which is covered in
+`rebuild-vector-store.md`.

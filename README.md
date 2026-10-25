@@ -440,6 +440,9 @@ The knobs worth knowing:
 Sixteen gigabytes of RAM is what makes local embedding and reranking possible, so
 the query path consumes no API quota. It is the reason this is the primary target.
 
+Step by step, including the GitHub secrets and repository variables the
+workflows need: [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md). In short:
+
 1. Create a **Docker** Space.
 2. Add the secrets from [account setup](#free-tier-account-setup), plus
    `APP_ENV=prod`, `ALLOW_DEV_ANON=false`, `ARTIFACT_BACKEND=hf`.
@@ -447,6 +450,8 @@ the query path consumes no API quota. It is the reason this is the primary targe
    secret in GitHub.
 4. Push a tag: `git tag v1.0.0 && git push --tags`. The deploy workflow pushes
    the tree, swaps in the Space README front matter, and waits for `/healthz`.
+5. Register the artifact-store webhook, or documents ingested in Colab stay
+   invisible to the API until it restarts.
 
 Models are baked into the image, so a cold start never waits on a download.
 `/readyz` stays red until warm-up finishes, which makes a cold start visible
