@@ -1,0 +1,19 @@
+# Copy to configs/tenants.yaml (gitignored) for local dev, or serialise to the TENANTS_JSON env var.
+# Generate key hashes with:  python scripts/make_api_key.py --tenant acme --role writer
+- tenant_id: demo
+  name: Demo tenant
+  pii_mode: allow            # allow | mask | drop
+  clearance: confidential    # highest classification this tenant's users may read by default
+  keys:
+    - key_id: demo-reader
+      role: reader           # reader | writer | admin
+      groups: ["all"]
+      argon2_hash: "$argon2id$v=19$m=65536,t=3,p=4$REPLACE_ME"
+    - key_id: demo-writer
+      role: writer
+      groups: ["all", "finance"]
+      argon2_hash: "$argon2id$v=19$m=65536,t=3,p=4$REPLACE_ME"
+  jwt:
+    enabled: false
+    hs256_secret_env: JWT_HS256_SECRET
+    jwks_url: null

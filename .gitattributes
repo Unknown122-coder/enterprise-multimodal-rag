@@ -1,0 +1,23 @@
+# Normalise line endings so the same tree builds on Windows, Linux CI and in the
+# Docker image. Without this, a CRLF checkout breaks shell scripts and the
+# Dockerfile heredoc on Linux.
+* text=auto eol=lf
+
+# Binary and generated files: never diff or normalise.
+*.pdf     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.webp    binary
+*.tif     binary
+*.tiff    binary
+*.parquet binary
+*.sqlite  binary
+*.onnx    binary
+
+# Notebooks are generated from the .py sources by scripts/build_notebooks.py.
+# Marking them as generated keeps them out of diff review noise.
+*.ipynb   linguist-generated=true -diff
+
+# The golden set is data, not prose: keep it whole in diffs.
+tests/golden/*.jsonl text eol=lf

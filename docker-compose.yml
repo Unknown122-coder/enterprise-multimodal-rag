@@ -1,0 +1,30 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports: ["6333:6333", "6334:6334"]
+    volumes: ["qdrant_data:/qdrant/storage"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    ports: ["8000:7860"]
+    environment:
+      PORT: "7860"
+      APP_ENV: dev
+      QDRANT_URL: http://qdrant:6333
+      ARTIFACT_BACKEND: local
+      ARTIFACT_LOCAL_ROOT: /app/var/store
+      ALLOW_DEV_ANON: "true"
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes: ["store_data:/app/var/store"]
+    depends_on:
+      qdrant: { condition: service_healthy }
+
+volumes:
+  qdrant_data:
+  store_data:

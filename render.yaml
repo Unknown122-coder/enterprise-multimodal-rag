@@ -1,0 +1,62 @@
+# Render blueprint (fallback host; Hugging Face Spaces is the primary target).
+#
+# Render's free web service has 512 MB of RAM, which cannot hold the local
+# embedding and reranking models. This profile therefore switches the embedder to
+# the Gemini API and disables the cross-encoder. Expect lower retrieval precision
+# and a hard daily ceiling on queries, because the query path now consumes an LLM
+# quota. Read docs/adr/0003-hosting.md before choosing this.
+services:
+  - type: web
+    name: emrag-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: APP_ENV
+        value: prod
+      - key: ALLOW_DEV_ANON
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: VECTOR_BACKEND
+        value: qdrant
+      - key: COLLECTION_NAME
+        value: chunks_v1
+      - key: ARTIFACT_BACKEND
+        value: hf
+      # Render profile: 512 MB cannot host the local models.
+      - key: EMBED_BACKEND
+        value: gemini
+      - key: EMBED_MODEL
+        value: gemini-embedding-001
+      - key: EMBED_DIM
+        value: "768"
+      - key: RERANK_ENABLED
+        value: "false"
+      - key: USE_DOCLING
+        value: "false"
+      - key: MAX_PAGES_LITE
+        value: "10"
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: HF_DATASET_REPO
+        sync: false
+      - key: HF_WEBHOOK_SECRET
+        sync: false
+      - key: TENANTS_JSON
+        sync: false
+      - key: JWT_HS256_SECRET
+        generateValue: true

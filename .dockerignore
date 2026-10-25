@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+venv
+var
+notebooks
+tests
+docs
+*.ipynb
+.mypy_cache
+.ruff_cache
+.pytest_cache
+__pycache__
+*.egg-info
+.env
+.env.local

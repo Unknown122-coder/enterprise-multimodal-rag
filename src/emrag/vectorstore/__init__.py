@@ -1,0 +1,1 @@
+"""Swappable vector store adapters."""

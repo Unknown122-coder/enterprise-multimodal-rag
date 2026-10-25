@@ -1,0 +1,64 @@
+name: deploy-hf-space
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: false
+
+concurrency:
+  group: deploy-space
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: push to the Space
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Prepare the Space tree
+        run: |
+          # The Space needs its own README front matter; everything else is the repo.
+          cp SPACE_README.md README.space.md
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          mv README.md README.repo.md
+          mv README.space.md README.md
+          git add -A
+          git commit -m "ci: Space README front matter for ${GITHUB_REF_NAME}" --no-verify
+
+      - name: Push
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          if [ -z "${HF_SPACE}" ]; then
+            echo "HF_SPACE repository variable is not set (expected org/space)"; exit 1
+          fi
+          git push --force \
+            "https://ci:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" HEAD:main
+
+      - name: Wait for the Space to come up
+        env:
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          host="$(echo "${HF_SPACE}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')"
+          url="https://${host}.hf.space/healthz"
+          echo "probing ${url}"
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 20 "${url}" > /dev/null; then
+              echo "live after $((attempt * 15))s"; exit 0
+            fi
+            sleep 15
+          done
+          echo "Space did not become healthy; check the build logs in the Space UI"
+          exit 1

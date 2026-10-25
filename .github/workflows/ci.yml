@@ -1,0 +1,163 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  # Tests run fully offline: no model downloads, no API keys, in-process Qdrant.
+  APP_ENV: test
+  EMBED_BACKEND: deterministic
+  RERANK_ENABLED: "false"
+  VECTOR_BACKEND: qdrant
+  QDRANT_URL: ":memory:"
+  ARTIFACT_BACKEND: local
+  ALLOW_DEV_ANON: "true"
+  USE_DOCLING: "false"
+  LOG_LEVEL: WARNING
+
+jobs:
+  quality:
+    name: lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+          pip install -e . --no-deps
+
+      - name: Lint
+        run: |
+          ruff check src tests scripts ui
+          ruff format --check src tests
+
+      - name: Type check
+        run: mypy src
+
+      - name: Unit and integration tests
+        run: pytest -q --cov=src/emrag --cov-report=term-missing --cov-report=xml
+
+      - name: Retrieval evaluation gate
+        run: |
+          python -m emrag.eval.run_eval \
+            --mode retrieval \
+            --golden tests/golden/v1.jsonl \
+            --report var/eval-retrieval.json || true
+        # The shipped golden set has no corpus in CI, so this records the report
+        # without gating. Point it at a seeded staging store and add
+        # --min-recall 0.85 to make it blocking.
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  contract:
+    name: schema and OpenAPI contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+          pip install -e . --no-deps
+      - name: Export the chunk JSON Schema
+        run: |
+          python - <<'PY'
+          import json
+          from emrag.ingestion.metadata import chunk_json_schema
+          schema = chunk_json_schema()
+          required = set(schema["required"])
+          # The citation contract depends on these; losing one breaks traceability.
+          must_have = {
+              "chunk_id", "doc_id", "tenant_id", "page", "bbox", "modality",
+              "text", "text_hash", "parent_id", "acl_groups", "ingest_version",
+          }
+          missing = must_have - required
+          assert not missing, f"chunk contract lost required fields: {sorted(missing)}"
+          print(f"chunk schema has {len(schema['properties'])} properties")
+          PY
+      - name: Export OpenAPI
+        run: python scripts/export_openapi.py docs/api/openapi.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: docs/api/openapi.json
+
+  docker:
+    name: image builds and serves
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: emrag:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start and probe
+        run: |
+          docker run -d --name emrag \
+            -e PORT=7860 \
+            -e APP_ENV=dev \
+            -e VECTOR_BACKEND=qdrant \
+            -e QDRANT_URL=":memory:" \
+            -e ARTIFACT_BACKEND=local \
+            -e ARTIFACT_LOCAL_ROOT=/app/var/store \
+            -e ALLOW_DEV_ANON=true \
+            -p 7860:7860 emrag:ci
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:7860/healthz > /dev/null; then
+              echo "healthy after ${attempt}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7860/healthz
+          curl -fsS http://127.0.0.1:7860/readyz
+          curl -fsS http://127.0.0.1:7860/v1/meta
+
+      - name: Logs on failure
+        if: failure()
+        run: docker logs emrag
+
+      - name: Stop
+        if: always()
+        run: docker rm -f emrag || true

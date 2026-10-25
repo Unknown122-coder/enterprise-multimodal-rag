@@ -1,0 +1,70 @@
+# Free-tier provider catalogue. LIMITS ARE INDICATIVE - verify in each console and edit here only.
+# tiers: fast (volume answers) | quality (best answers) | rewrite | repair | vision | judge
+providers:
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+    kind: openai_compatible
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta
+    api_key_env: GEMINI_API_KEY
+    kind: gemini
+
+models:
+  - key: groq/llama-4-scout
+    provider: groq
+    model: meta-llama/llama-4-scout-17b-16e-instruct
+    tiers: [fast, vision]
+    priority: 10
+    limits: { rpm: 30, tpm: 30000, rpd: 1000, tpd: 500000 }
+    capabilities: { json_schema: true, vision: true, context: 131072 }
+
+  # One entry per underlying model: the quota ledger keys on `key`, so listing a
+  # model twice would give it two independent budgets and over-spend the real one.
+  - key: gemini/flash-lite
+    provider: gemini
+    model: gemini-2.5-flash-lite
+    tiers: [fast, rewrite, repair, judge, vision]
+    priority: 20
+    limits: { rpm: 15, tpm: 250000, rpd: 1000, tpd: null }
+    capabilities: { json_schema: true, vision: true, context: 1048576 }
+
+  - key: groq/gpt-oss-120b
+    provider: groq
+    model: openai/gpt-oss-120b
+    tiers: [fast]
+    priority: 30
+    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 200000 }
+    capabilities: { json_schema: true, vision: false, context: 131072 }
+
+  - key: groq/llama-3.3-70b
+    provider: groq
+    model: llama-3.3-70b-versatile
+    tiers: [quality]
+    priority: 10
+    limits: { rpm: 30, tpm: 12000, rpd: 1000, tpd: 100000 }
+    capabilities: { json_schema: true, vision: false, context: 131072 }
+
+  - key: gemini/flash
+    provider: gemini
+    model: gemini-2.5-flash
+    tiers: [quality, vision]
+    priority: 20
+    limits: { rpm: 10, tpm: 250000, rpd: 250, tpd: null }
+    capabilities: { json_schema: true, vision: true, context: 1048576 }
+
+  - key: groq/llama-3.1-8b
+    provider: groq
+    model: llama-3.1-8b-instant
+    tiers: [rewrite, repair]
+    priority: 10
+    limits: { rpm: 30, tpm: 6000, rpd: 14400, tpd: 500000 }
+    capabilities: { json_schema: true, vision: false, context: 131072 }
+
+routing:
+  # Reserve a fraction of each daily budget so interactive queries survive a batch job.
+  daily_reserve_ratio: 0.10
+  max_attempts_per_tier: 3
+  cooldown_seconds: 60
+  request_timeout_s: 30
+  connect_timeout_s: 5

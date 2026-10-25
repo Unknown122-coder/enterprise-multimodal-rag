@@ -1,0 +1,25 @@
+# Runtime pins for the API image (Dockerfile). Generated from pyproject [api] extra.
+pydantic==2.10.3
+pydantic-settings==2.6.1
+httpx==0.28.1
+tiktoken==0.8.0
+rapidfuzz==3.10.1
+structlog==24.4.0
+PyYAML==6.0.2
+orjson==3.10.12
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.19
+slowapi==0.1.9
+PyJWT[crypto]==2.10.1
+argon2-cffi==23.1.0
+filetype==1.2.0
+qdrant-client==1.12.1
+fastembed==0.4.2
+PyMuPDF==1.25.1
+pikepdf==9.4.2
+# fastembed 0.4.x constrains pillow below 11; keep these in step.
+pillow==10.4.0
+huggingface-hub==0.26.5
+pyarrow==18.1.0
+pandas==2.2.3

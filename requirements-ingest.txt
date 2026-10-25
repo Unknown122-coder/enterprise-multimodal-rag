@@ -1,0 +1,5 @@
+# Extra pins for the heavy ingestion environment (Colab). Install on top of requirements.txt.
+-r requirements.txt
+docling==2.15.1
+pdfplumber==0.11.4
+rapidocr-onnxruntime==1.4.1

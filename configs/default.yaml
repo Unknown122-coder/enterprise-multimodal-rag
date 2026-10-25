@@ -1,0 +1,39 @@
+# Tunable pipeline + retrieval defaults. Overridable by environment variables (see settings.py).
+chunking:
+  child_target_tokens: 350
+  child_min_tokens: 80
+  child_max_tokens: 512
+  child_overlap_ratio: 0.15
+  parent_max_tokens: 1500
+  table_max_tokens: 800
+  figure_max_tokens: 400
+
+retrieval:
+  candidates_k: 40
+  dense_prefetch: 40
+  sparse_prefetch: 40
+  top_k: 8
+  rerank_enabled: true
+  gate_tau: 0.15
+  parent_expansion: true
+  evidence_token_budget: 2500
+  rrf_k: 60
+
+generation:
+  max_output_tokens: 700
+  temperature: 0.0
+  repair_enabled: true
+  quote_match_threshold: 90
+  min_quote_words: 4
+  max_quote_chars: 200
+
+figures:
+  min_pixels: 14400          # 120x120
+  max_aspect_ratio: 8.0
+  batch_size: 4
+  max_per_document: 400
+
+ocr:
+  dpi: 300
+  min_chars_native: 50
+  image_coverage_scanned: 0.6
