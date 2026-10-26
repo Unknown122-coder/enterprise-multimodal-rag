@@ -28,7 +28,7 @@ models:
     model: qwen/qwen3.8-27b
     tiers: [fast, rewrite, repair]
     priority: 10
-    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 500000 }  # tpm read from headers 2026-10-27
+    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 200000 }  # tpm read from headers 2026-10-27
     capabilities: { json_schema: true, vision: false, context: 131072 }
     # Do not send reasoning_effort: on this model it turns thinking on.
 
@@ -43,13 +43,36 @@ models:
     # thinking and can return empty content on short calls.
     params: { reasoning_effort: low }
 
+  # Gemini limits below were read from aistudio.google.com/rate-limit on
+  # 2026-10-27 for this account's free tier.
   - key: gemini/flash-lite
     provider: gemini
     model: gemini-3.5-flash-lite
     tiers: [fast, rewrite, repair, judge, vision]
     priority: 30
-    limits: { rpm: 15, tpm: 250000, rpd: 1000, tpd: null }
+    limits: { rpm: 15, tpm: 250000, rpd: 500, tpd: null }
     capabilities: { json_schema: true, vision: true, context: 1048576 }
+
+  - key: gemini/flash-lite-3.1
+    provider: gemini
+    model: gemini-3.1-flash-lite
+    tiers: [fast, rewrite, repair, judge]
+    priority: 40
+    limits: { rpm: 15, tpm: 250000, rpd: 500, tpd: null }
+    # Vision not yet verified on this model, so it is not in the vision tier.
+    capabilities: { json_schema: true, vision: false, context: 1048576 }
+
+  - key: gemini/gemma-26b
+    provider: gemini
+    model: gemma-4-26b-a4b-it
+    tiers: [fast, rewrite, repair]
+    priority: 50
+    # By far the largest daily allowance on the free tier. 16K tokens per
+    # minute caps it at roughly four answers a minute, so it is the deep
+    # fallback rather than the first choice. Verified with the citation schema;
+    # the 31B sibling took over a minute per call and is left out.
+    limits: { rpm: 30, tpm: 16000, rpd: 14400, tpd: null }
+    capabilities: { json_schema: true, vision: false, context: 131072 }
 
   # ---- quality tier: the best answer, with the smallest budgets --------------
   - key: groq/gpt-oss-120b
@@ -66,7 +89,10 @@ models:
     model: gemini-3.5-flash
     tiers: [quality, vision]
     priority: 20
-    limits: { rpm: 10, tpm: 250000, rpd: 250, tpd: null }
+    # The console has no 3.5 Flash row: calls to it are metered under
+    # "Gemini 3.6 Flash", which allows only 20 requests a day. A fallback for
+    # the quality tier and for figure captioning, not a volume path.
+    limits: { rpm: 5, tpm: 250000, rpd: 20, tpd: null }
     capabilities: { json_schema: true, vision: true, context: 1048576 }
 
 routing:
