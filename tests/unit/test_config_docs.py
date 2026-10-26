@@ -151,3 +151,24 @@ class TestWarmUpGate:
         state.warm = False
         state.warm_event = asyncio.Event()
         assert await state.wait_until_warm(timeout_s=0.05) is False
+
+
+class TestSecretFilesAreIgnored:
+    """Files that hold credentials must be ignored by git.
+
+    configs/tenants.yaml was documented as ignored but was not, and a careless
+    `git add -A` would have committed the tenant records. The ignore rules are
+    checked by asking git itself, so this cannot drift from the real behaviour.
+    """
+
+    @pytest.mark.parametrize("path", [".env", ".env.local", "configs/tenants.yaml"])
+    def test_git_ignores(self, path: str) -> None:
+        import shutil
+        import subprocess
+
+        if shutil.which("git") is None or not (REPO / ".git").exists():
+            pytest.skip("not a git checkout")
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", path], cwd=REPO, capture_output=True, check=False
+        )
+        assert result.returncode == 0, f"{path} is not ignored by git"

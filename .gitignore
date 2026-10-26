@@ -8,6 +8,8 @@ dist/
 venv/
 .env
 .env.local
+# Local tenant records: Argon2 hashes, never committed. Use TENANTS_JSON in prod.
+configs/tenants.yaml
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
