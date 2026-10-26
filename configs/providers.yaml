@@ -28,7 +28,7 @@ models:
     model: qwen/qwen3.8-27b
     tiers: [fast, rewrite, repair]
     priority: 10
-    limits: { rpm: 30, tpm: 6000, rpd: 1000, tpd: 500000 }
+    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 500000 }  # tpm read from headers 2026-10-27
     capabilities: { json_schema: true, vision: false, context: 131072 }
     # Do not send reasoning_effort: on this model it turns thinking on.
 

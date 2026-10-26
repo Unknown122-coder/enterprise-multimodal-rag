@@ -4,7 +4,8 @@ Run it after adding each key to ``.env``. Each check makes the cheapest possible
 call (a model listing, a health probe, a whoami) so nothing here spends quota.
 Secrets are never printed; only whether each one is set and whether it works.
 
-    python scripts/check_setup.py
+    python scripts/check_setup.py           # verify every configured account
+    python scripts/check_setup.py --limits  # read Groq's real limits from headers
 
 Exit code is 0 when everything that is configured works, 1 when a configured
 service fails, and 2 when nothing is configured at all.
@@ -193,9 +194,64 @@ def check_tenants(definitions: list[dict[str, object]], anon: bool, env: str) ->
     return Result("Tenants", "ok", f"{usable} API key(s) across {len(definitions)} tenant(s)")
 
 
+async def report_groq_limits(api_key: str | None) -> None:
+    """Read Groq's per-model limits from its response headers.
+
+    Groq returns x-ratelimit-limit-requests (per day) and
+    x-ratelimit-limit-tokens (per minute) on every completion, so the real
+    numbers can be read with one minimal call per model instead of copied from
+    the console. Gemini publishes no such headers; its limits stay manual.
+    """
+    if not api_key:
+        sys.stdout.write("  Groq: GROQ_API_KEY not set\n")
+        return
+    catalogue = get_settings().provider_catalogue
+    entries = [e for e in catalogue.get("models", []) if e.get("provider") == "groq"]
+    sys.stdout.write("  Groq limits from response headers (one tiny call per model):\n")
+    sys.stdout.write(f"  {'model':34} {'rpd':>8} {'tpm':>8}   catalogue rpd/tpm\n")
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        for entry in entries:
+            body: dict[str, object] = {
+                "model": entry["model"],
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_completion_tokens": 1,
+            }
+            body.update(entry.get("params") or {})
+            try:
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json=body,
+                )
+            except httpx.HTTPError as exc:
+                sys.stdout.write(f"  {entry['model']:34} network error: {exc}\n")
+                continue
+            headers = response.headers
+            rpd = headers.get("x-ratelimit-limit-requests", "?")
+            tpm = headers.get("x-ratelimit-limit-tokens", "?")
+            limits = entry.get("limits") or {}
+            flag = ""
+            if rpd.isdigit() and limits.get("rpd") not in (None, int(rpd)):
+                flag += f"  rpd differs (catalogue {limits.get('rpd')})"
+            if tpm.isdigit() and limits.get("tpm") not in (None, int(tpm)):
+                flag += f"  tpm differs (catalogue {limits.get('tpm')})"
+            sys.stdout.write(
+                f"  {entry['model']:34} {rpd:>8} {tpm:>8}   "
+                f"{limits.get('rpd')}/{limits.get('tpm')}{flag}\n"
+            )
+    sys.stdout.write(
+        "  Daily token limits (tpd) are not in the headers; read them at "
+        "console.groq.com/settings/limits.\n"
+        "  Gemini limits: aistudio.google.com/rate-limit (free tier column).\n"
+    )
+
+
 async def main() -> int:
     """Run every check and print a table."""
     cfg = get_settings()
+    if "--limits" in sys.argv:
+        await report_groq_limits(cfg.groq_api_key)
+        return 0
     results = [
         await check_groq(cfg.groq_api_key),
         await check_gemini(cfg.gemini_api_key),
