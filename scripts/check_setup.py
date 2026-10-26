@@ -204,7 +204,8 @@ async def main() -> int:
 
     icon = {"ok": "OK     ", "failed": "FAILED ", "not_set": "not set"}
     sys.stdout.write(
-        f"\nAPP_ENV={cfg.app_env}  embed={cfg.embed_backend}  store={cfg.vector_backend}  artifacts={cfg.artifact_backend}\n\n"
+        f"\nAPP_ENV={cfg.app_env}  embed={cfg.embed_backend}  "
+        f"store={cfg.vector_backend}  artifacts={cfg.artifact_backend}\n\n"
     )
     for r in results:
         sys.stdout.write(f"  {icon[r.status]}  {r.name:14} {r.detail}\n")
