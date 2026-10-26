@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
+from emrag.citation.contract import make_strict
 from emrag.llm.base import LLMMessage, LLMRequest
 from emrag.llm.router import LLMRouter
 from emrag.observability.logging import get_logger
@@ -33,6 +34,7 @@ REWRITE_SCHEMA: dict[str, Any] = {
         "keywords": {"type": "array", "items": {"type": "string"}},
     },
 }
+REWRITE_SCHEMA = make_strict(REWRITE_SCHEMA)
 
 _SYSTEM = (
     "You rewrite search queries for a document retrieval system. Produce at most two "

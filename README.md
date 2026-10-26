@@ -422,7 +422,7 @@ The knobs worth knowing:
 
 | variable | default | effect |
 |----------|---------|--------|
-| `RETRIEVAL_GATE_TAU` | `0.15` | higher refuses more; calibrate with notebook 03 |
+| `RETRIEVAL_GATE_TAU` | `0.05` | sigmoid of the reranker logit; higher refuses more; calibrate with notebook 03 |
 | `EVIDENCE_TOKEN_BUDGET` | `2500` | context given to the model |
 | `TOP_K` / `CANDIDATES_K` | `8` / `40` | passages used and retrieved |
 | `RERANK_ENABLED` | `true` | the cross encoder; off saves ~350 ms, costs precision |

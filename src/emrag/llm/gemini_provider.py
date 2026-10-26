@@ -124,6 +124,7 @@ class GeminiProvider(LLMProvider):
         }
         if request.stop:
             gen_config["stopSequences"] = request.stop
+        gen_config.update(spec.params)
         if request.json_schema:
             gen_config["responseMimeType"] = "application/json"
             gen_config["responseSchema"] = _to_gemini_schema(request.json_schema)
@@ -192,6 +193,12 @@ def _to_gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
             continue
         if key == "type" and isinstance(value, str):
             out["type"] = value.upper()
+        elif key == "type" and isinstance(value, list):
+            # JSON Schema's ["string", "null"] is Gemini's STRING + nullable.
+            concrete = [v for v in value if v != "null"]
+            out["type"] = str(concrete[0]).upper() if concrete else "STRING"
+            if "null" in value:
+                out["nullable"] = True
         elif key == "properties" and isinstance(value, dict):
             out["properties"] = {k: _to_gemini_schema(v) for k, v in value.items()}
         elif key == "items":

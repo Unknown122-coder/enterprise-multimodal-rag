@@ -45,7 +45,7 @@ class RetrievalOptions:
     parent_expansion: bool = True
     rerank: bool = True
     token_budget: int = 2500
-    gate_tau: float = 0.15
+    gate_tau: float = 0.05
     deadline_ms: int | None = None
 
 

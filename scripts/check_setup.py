@@ -32,6 +32,28 @@ class Result:
     detail: str
 
 
+def _catalogue_models(provider: str) -> list[str]:
+    """Model names configs/providers.yaml routes to for one provider."""
+    return [
+        str(entry["model"])
+        for entry in get_settings().provider_catalogue.get("models", [])
+        if entry.get("provider") == provider
+    ]
+
+
+def _catalogue_detail(provider: str, available: set[str]) -> str:
+    """Compare what the account can see with what the catalogue will route to."""
+    wanted = _catalogue_models(provider)
+    missing = [w for w in wanted if w not in available]
+    detail = (
+        f"{len(available)} models visible; catalogue routes to "
+        f"{len(wanted) - len(missing)}/{len(wanted)} of them"
+    )
+    if missing:
+        detail += f"; NOT on this account: {missing} -> edit configs/providers.yaml"
+    return detail
+
+
 async def check_groq(api_key: str | None) -> Result:
     """List models, which is free and proves the key is accepted."""
     if not api_key:
@@ -49,19 +71,7 @@ async def check_groq(api_key: str | None) -> Result:
     if response.status_code != 200:
         return Result("Groq", "failed", f"HTTP {response.status_code}: {response.text[:120]}")
     names = {m.get("id") for m in response.json().get("data", [])}
-    wanted = [
-        "llama-3.3-70b-versatile",
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        "llama-3.1-8b-instant",
-    ]
-    present = [w for w in wanted if w in names]
-    missing = [w for w in wanted if w not in names]
-    detail = (
-        f"{len(names)} models available; catalogue models present: {len(present)}/{len(wanted)}"
-    )
-    if missing:
-        detail += f"; missing from your account: {missing} (edit configs/providers.yaml)"
-    return Result("Groq", "ok", detail)
+    return Result("Groq", "ok", _catalogue_detail("groq", names))
 
 
 async def check_gemini(api_key: str | None) -> Result:
@@ -85,15 +95,7 @@ async def check_gemini(api_key: str | None) -> Result:
     if response.status_code != 200:
         return Result("Gemini", "failed", f"HTTP {response.status_code}: {response.text[:120]}")
     names = {m.get("name", "").removeprefix("models/") for m in response.json().get("models", [])}
-    wanted = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
-    present = [w for w in wanted if w in names]
-    missing = [w for w in wanted if w not in names]
-    detail = (
-        f"{len(names)} models available; catalogue models present: {len(present)}/{len(wanted)}"
-    )
-    if missing:
-        detail += f"; missing: {missing} (edit configs/providers.yaml)"
-    return Result("Gemini", "ok", detail)
+    return Result("Gemini", "ok", _catalogue_detail("gemini", names))
 
 
 async def check_qdrant(url: str, api_key: str | None, collection: str) -> Result:

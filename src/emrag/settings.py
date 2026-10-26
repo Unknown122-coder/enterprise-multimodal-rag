@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     use_docling: bool = False
 
     # retrieval / generation
-    retrieval_gate_tau: float = 0.15
+    retrieval_gate_tau: float = 0.05
     candidates_k: int = 40
     top_k: int = 8
     evidence_token_budget: int = 2500

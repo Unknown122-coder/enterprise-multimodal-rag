@@ -61,9 +61,32 @@ ANSWER_SCHEMA: dict[str, Any] = {
             },
         },
         "unanswered_aspects": {"type": "array", "items": {"type": "string"}},
-        "notes": {"type": "string"},
+        "notes": {"type": ["string", "null"]},
     },
 }
+
+
+def make_strict(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``schema`` that satisfies provider strict JSON modes.
+
+    Groq's ``json_schema`` mode (and OpenAI's) refuses a schema unless every
+    object lists all of its properties in ``required`` and forbids extras. An
+    optional field is therefore expressed as required-but-nullable, which is
+    what the ``["string", "null"]`` types in the schemas above do. Applying this
+    at definition time means a schema can never drift out of compliance by
+    someone adding a property and forgetting ``required``.
+    """
+    out = dict(schema)
+    if out.get("type") == "object" and isinstance(out.get("properties"), dict):
+        out["properties"] = {k: make_strict(v) for k, v in out["properties"].items()}
+        out["required"] = list(out["properties"])
+        out["additionalProperties"] = False
+    if isinstance(out.get("items"), dict):
+        out["items"] = make_strict(out["items"])
+    return out
+
+
+ANSWER_SCHEMA = make_strict(ANSWER_SCHEMA)
 
 STREAM_TRAILER_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -87,14 +110,14 @@ STREAM_TRAILER_SCHEMA: dict[str, Any] = {
     },
 }
 
-REPAIR_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["answer"],
-    "properties": {
-        "answer": ANSWER_SCHEMA["properties"]["answer"],
-    },
-}
+STREAM_TRAILER_SCHEMA = make_strict(STREAM_TRAILER_SCHEMA)
+
+REPAIR_SCHEMA: dict[str, Any] = make_strict(
+    {
+        "type": "object",
+        "properties": {"answer": ANSWER_SCHEMA["properties"]["answer"]},
+    }
+)
 
 
 @dataclass

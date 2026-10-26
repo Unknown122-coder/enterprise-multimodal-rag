@@ -1,5 +1,16 @@
-# Free-tier provider catalogue. LIMITS ARE INDICATIVE - verify in each console and edit here only.
-# tiers: fast (volume answers) | quality (best answers) | rewrite | repair | vision | judge
+# Free-tier provider catalogue.
+#
+# Model names were verified against real accounts on 2026-10-27 with
+# scripts/check_setup.py: every model below accepted a request that day. The
+# blueprint's original Llama and Gemini 2.5 entries no longer exist for new
+# accounts, which is the normal state of affairs; expect to revisit this file.
+#
+# LIMITS ARE INDICATIVE. Verify each in the provider console and edit here only;
+# nothing else in the system reads a rate limit. tpd: null means no published
+# daily token cap.
+#
+# tiers: fast (volume answers) | quality (best answers) | rewrite | repair |
+#        vision (figure captioning) | judge (evaluation)
 providers:
   groq:
     base_url: https://api.groq.com/openai/v1
@@ -11,58 +22,56 @@ providers:
     kind: gemini
 
 models:
-  - key: groq/llama-4-scout
+  # ---- fast tier: the volume path, ordered by latency ----------------------
+  - key: groq/qwen3.8-27b
     provider: groq
-    model: meta-llama/llama-4-scout-17b-16e-instruct
-    tiers: [fast, vision]
+    model: qwen/qwen3.8-27b
+    tiers: [fast, rewrite, repair]
     priority: 10
-    limits: { rpm: 30, tpm: 30000, rpd: 1000, tpd: 500000 }
-    capabilities: { json_schema: true, vision: true, context: 131072 }
+    limits: { rpm: 30, tpm: 6000, rpd: 1000, tpd: 500000 }
+    capabilities: { json_schema: true, vision: false, context: 131072 }
+    # Do not send reasoning_effort: on this model it turns thinking on.
 
-  # One entry per underlying model: the quota ledger keys on `key`, so listing a
-  # model twice would give it two independent budgets and over-spend the real one.
+  - key: groq/gpt-oss-20b
+    provider: groq
+    model: openai/gpt-oss-20b
+    tiers: [fast, rewrite, repair]
+    priority: 20
+    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 200000 }
+    capabilities: { json_schema: true, vision: false, context: 131072 }
+    # A reasoning model: without this it spends most of the output budget
+    # thinking and can return empty content on short calls.
+    params: { reasoning_effort: low }
+
   - key: gemini/flash-lite
     provider: gemini
-    model: gemini-2.5-flash-lite
+    model: gemini-3.5-flash-lite
     tiers: [fast, rewrite, repair, judge, vision]
-    priority: 20
+    priority: 30
     limits: { rpm: 15, tpm: 250000, rpd: 1000, tpd: null }
     capabilities: { json_schema: true, vision: true, context: 1048576 }
 
+  # ---- quality tier: the best answer, with the smallest budgets --------------
   - key: groq/gpt-oss-120b
     provider: groq
     model: openai/gpt-oss-120b
-    tiers: [fast]
-    priority: 30
-    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 200000 }
-    capabilities: { json_schema: true, vision: false, context: 131072 }
-
-  - key: groq/llama-3.3-70b
-    provider: groq
-    model: llama-3.3-70b-versatile
     tiers: [quality]
     priority: 10
-    limits: { rpm: 30, tpm: 12000, rpd: 1000, tpd: 100000 }
+    limits: { rpm: 30, tpm: 8000, rpd: 1000, tpd: 200000 }
     capabilities: { json_schema: true, vision: false, context: 131072 }
+    params: { reasoning_effort: low }
 
   - key: gemini/flash
     provider: gemini
-    model: gemini-2.5-flash
+    model: gemini-3.5-flash
     tiers: [quality, vision]
     priority: 20
     limits: { rpm: 10, tpm: 250000, rpd: 250, tpd: null }
     capabilities: { json_schema: true, vision: true, context: 1048576 }
 
-  - key: groq/llama-3.1-8b
-    provider: groq
-    model: llama-3.1-8b-instant
-    tiers: [rewrite, repair]
-    priority: 10
-    limits: { rpm: 30, tpm: 6000, rpd: 14400, tpd: 500000 }
-    capabilities: { json_schema: true, vision: false, context: 131072 }
-
 routing:
-  # Reserve a fraction of each daily budget so interactive queries survive a batch job.
+  # Reserve a fraction of each daily budget so a batch job cannot starve
+  # interactive queries.
   daily_reserve_ratio: 0.10
   max_attempts_per_tier: 3
   cooldown_seconds: 60

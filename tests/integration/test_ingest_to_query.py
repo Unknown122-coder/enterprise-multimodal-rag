@@ -403,3 +403,37 @@ class TestAnsweringWithCitations:
         assert "acquired a competitor" not in result.answer.markdown
         assert "48.2 million" in result.answer.markdown
         assert any(w.startswith("dropped_unverified_claims") for w in result.warnings)
+
+
+class TestReingestReplacesPoints:
+    """A re-ingest must replace a document's points, never merge into them.
+
+    Seen on the first real document: an initial ingest without a vision model
+    produced two placeholder figure chunks. After the chunker learned to drop
+    them, a re-ingest left the old points in the store, because upsert only
+    adds or overwrites. Stale chunks are still retrievable and still citable.
+    """
+
+    async def test_fewer_chunks_on_reingest_removes_the_extras(
+        self, app_state: Any, sample_pdf: bytes
+    ) -> None:
+        first = await _ingest(app_state, sample_pdf)
+        doc_id = first.record.doc_id
+
+        # Plant a stale point under this document, as an older chunking might.
+        chunks, vectors = await ArtifactReader(app_state.artifacts).read_chunks("demo", doc_id)
+        stale = chunks[0].model_copy(
+            update={
+                "chunk_id": f"{doc_id}:p001:c0099",
+                "text": "stale placeholder that a re-ingest must remove",
+                "text_hash": "sha256:" + "0" * 64,
+            }
+        )
+        await app_state.store.upsert([stale], [vectors[0]])
+        assert await app_state.store.count(tenant_id="demo", doc_id=doc_id) == first.chunks + 1
+
+        second = await _ingest(app_state, sample_pdf)
+        assert second.chunks == first.chunks
+        assert await app_state.store.count(tenant_id="demo", doc_id=doc_id) == first.chunks
+        remaining, _ = await app_state.store.list_chunks("demo", doc_id, limit=100)
+        assert all("stale placeholder" not in c.text for c in remaining)

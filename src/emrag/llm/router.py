@@ -258,6 +258,7 @@ def _parse_spec(entry: dict[str, Any]) -> ModelSpec:
         priority=int(entry.get("priority", 100)),
         limits=Limits(**(entry.get("limits") or {})),
         capabilities=Capabilities(**(entry.get("capabilities") or {})),
+        params=dict(entry.get("params") or {}),
     )
 
 

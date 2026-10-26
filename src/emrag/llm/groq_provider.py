@@ -129,6 +129,7 @@ class GroqProvider(LLMProvider):
         }
         if request.stop:
             body["stop"] = request.stop
+        body.update(spec.params)
         if request.json_schema and not stream:
             if spec.capabilities.json_schema:
                 body["response_format"] = {

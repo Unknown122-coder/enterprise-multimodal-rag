@@ -92,6 +92,10 @@ class ModelSpec(StrictModel):
     priority: int = 100
     limits: Limits = Field(default_factory=Limits)
     capabilities: Capabilities = Field(default_factory=Capabilities)
+    # Extra request fields merged into every call to this model, for example
+    # reasoning_effort on reasoning models that would otherwise spend the
+    # whole output budget thinking.
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class LLMProvider(abc.ABC):

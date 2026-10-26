@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from emrag.citation.contract import make_strict
 from emrag.llm.base import LLMMessage, LLMRequest
 from emrag.llm.router import LLMRouter
 from emrag.observability.logging import get_logger
@@ -48,6 +49,8 @@ RELEVANCE_SCHEMA: dict[str, Any] = {
         "why": {"type": "string"},
     },
 }
+FAITHFULNESS_SCHEMA = make_strict(FAITHFULNESS_SCHEMA)
+RELEVANCE_SCHEMA = make_strict(RELEVANCE_SCHEMA)
 
 _FAITHFULNESS_SYSTEM = (
     "You check whether each claim of an answer is entailed by the quoted evidence given "

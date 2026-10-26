@@ -14,7 +14,7 @@ retrieval:
   sparse_prefetch: 40
   top_k: 8
   rerank_enabled: true
-  gate_tau: 0.15
+  gate_tau: 0.05
   parent_expansion: true
   evidence_token_budget: 2500
   rrf_k: 60

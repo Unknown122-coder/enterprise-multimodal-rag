@@ -185,6 +185,13 @@ class IngestionPipeline:
                 chunks, parsed.pages or pages, parser_degraded_reasons=parsed.degraded_reasons
             )
 
+            # Replace, do not merge. Upserts are idempotent for identical output,
+            # but a re-ingest that produces fewer chunks (a changed chunker, or
+            # figures now dropped) would otherwise leave stale points behind,
+            # still retrievable and still citable.
+            stale = await self._store.delete_by_doc(tenant_id, doc_id)
+            if stale:
+                logger.info("ingest.replaced_points", doc_id=doc_id, removed=stale)
             upsert_report = await self._store.upsert(chunks, vectors)
             report.degraded_reasons.extend(
                 quality.verify_upsert(len(chunks), upsert_report.upserted)
@@ -304,16 +311,15 @@ class IngestionPipeline:
         if not survivors:
             return []
         if self._router is None or not self._router.has_tier("vision"):
-            logger.warning("ingest.vision_unavailable", figures=len(survivors))
-            return [
-                FigureDescription(
-                    image_key=e.image_bytes_ref or "",
-                    page=e.page,
-                    bbox=list(e.bbox),
-                    description=e.text or f"Figure on page {e.page}.",
-                )
-                for e in survivors
-            ]
+            descriptions = placeholder_descriptions(survivors)
+            skipped = sum(1 for d in descriptions if d.decorative)
+            logger.warning(
+                "ingest.vision_unavailable",
+                figures=len(survivors),
+                indexed=len(survivors) - skipped,
+                skipped_uncaptioned=skipped,
+            )
+            return descriptions
         return await describe_figures(
             self._router,
             survivors,
@@ -412,6 +418,30 @@ def _nearby_text(elements: list[Element], figures: list[Element]) -> dict[str, s
             if e.kind in ("paragraph", "caption", "heading") and e.text.strip()
         )
         out[figure.image_bytes_ref] = text[:600]
+    return out
+
+
+def placeholder_descriptions(figures: list[Element]) -> list[FigureDescription]:
+    """Describe figures when no vision model is available.
+
+    A figure with a caption is worth indexing on the caption alone. One without
+    is marked decorative so the chunker drops it: a chunk reading "Figure on
+    page 1" carries no information, competes with real passages in retrieval,
+    and could be cited. The crop stays in the artifacts, so a later full ingest
+    with a vision model can describe it properly.
+    """
+    out: list[FigureDescription] = []
+    for element in figures:
+        caption = (element.text or element.table_caption or "").strip()
+        out.append(
+            FigureDescription(
+                image_key=element.image_bytes_ref or "",
+                page=element.page,
+                bbox=list(element.bbox),
+                description=caption or f"Figure on page {element.page}.",
+                decorative=not caption,
+            )
+        )
     return out
 
 

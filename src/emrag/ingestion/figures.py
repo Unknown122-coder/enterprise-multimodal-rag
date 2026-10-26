@@ -20,6 +20,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from emrag.citation.contract import make_strict
 from emrag.core.types import Element
 from emrag.llm.base import ImagePart, LLMMessage, LLMRequest
 from emrag.llm.router import LLMRouter
@@ -75,6 +76,7 @@ CAPTION_SCHEMA: dict[str, Any] = {
         }
     },
 }
+CAPTION_SCHEMA = make_strict(CAPTION_SCHEMA)
 
 _SYSTEM_PROMPT = (
     "You describe figures extracted from corporate documents so they can be searched "
