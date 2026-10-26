@@ -54,6 +54,26 @@ This works because artifacts hold the vectors (see ADR 0004).
      -d '{"question":"<something you know is in the corpus>","top_k":5}'
    ```
 
+## Upgrading the local Qdrant image
+
+Qdrant's on-disk format is not readable across large version jumps: a 1.20
+server refused a volume written by 1.12 with "unknown variant `on_disk`" and
+exited. Do not try to upgrade the local container in place. Wipe its volume and
+replay, which is the procedure above and takes under a minute for a small
+corpus:
+
+```bash
+docker compose rm -sf qdrant
+docker volume rm "$(docker volume ls --format '{{.Name}}' | grep qdrant_data)"
+docker compose up -d qdrant
+python scripts/bootstrap_store.py
+python scripts/upsert_artifacts.py --tenant all --verify --refresh-manifest
+```
+
+Keep the `qdrant-client` pin and the compose image within one minor version of
+each other; the client warns, loudly, when they drift. Qdrant Cloud manages its
+own upgrades and is unaffected.
+
 ## Schema migration variant
 
 To change the collection schema without downtime:
