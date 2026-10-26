@@ -10,6 +10,8 @@ from __future__ import annotations
 import pathlib
 import re
 
+import pytest
+
 from emrag.settings import CONFIG_DIR, Settings
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
