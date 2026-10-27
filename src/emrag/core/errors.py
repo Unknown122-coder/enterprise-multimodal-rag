@@ -101,6 +101,14 @@ class ProviderError(EmragError):
     status = 502
 
 
+class ProviderTimeout(ProviderError):
+    """The provider did not answer within the timeout the router allowed.
+
+    Kept separate from ``ProviderError`` because a timeout the caller's deadline
+    forced says nothing about the provider's health, and must not cool it.
+    """
+
+
 class StoreUnavailable(EmragError):
     """The vector store or artifact store could not be reached."""
 

@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from emrag.core.errors import ProviderError, RateLimited
+from emrag.core.errors import ProviderError, ProviderTimeout, RateLimited
 from emrag.llm.base import ImagePart, LLMProvider, LLMRequest, LLMResponse, ModelSpec
 from emrag.observability.logging import get_logger
 
@@ -155,7 +155,7 @@ class GroqProvider(LLMProvider):
             except httpx.TimeoutException as exc:
                 last_exc = exc
                 if attempt == _MAX_ATTEMPTS:
-                    raise ProviderError(f"groq request timed out after {timeout_s}s") from exc
+                    raise ProviderTimeout(f"groq request timed out after {timeout_s}s") from exc
                 await asyncio.sleep(_backoff(attempt))
                 continue
             except httpx.HTTPError as exc:

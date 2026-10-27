@@ -13,7 +13,13 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from emrag.core.errors import ModelUnavailable, ProviderError, QuotaExhausted, RateLimited
+from emrag.core.errors import (
+    ModelUnavailable,
+    ProviderError,
+    ProviderTimeout,
+    QuotaExhausted,
+    RateLimited,
+)
 from emrag.core.types import ModelTier
 from emrag.llm.base import Capabilities, Limits, LLMProvider, LLMRequest, LLMResponse, ModelSpec
 from emrag.llm.quota import QuotaLedger
@@ -164,9 +170,19 @@ class LLMRouter:
                 continue
             except ProviderError as exc:
                 await self._ledger.release(spec.key, est)
-                await self._ledger.cool(spec.key)
-                logger.warning("llm.provider_failed", model=spec.key, error=str(exc))
-                blocked.append(f"{spec.key}:error")
+                # A timeout forced by the caller's deadline (shorter than the
+                # configured request timeout) is the caller's problem, not the
+                # provider's: cooling the model for it would take the healthiest
+                # model out of rotation for a minute on every tight request.
+                forced = (
+                    isinstance(exc, ProviderTimeout) and timeout_s < self._config.request_timeout_s
+                )
+                if not forced:
+                    await self._ledger.cool(spec.key)
+                logger.warning(
+                    "llm.provider_failed", model=spec.key, error=str(exc), cooled=not forced
+                )
+                blocked.append(f"{spec.key}:{'deadline' if forced else 'error'}")
                 continue
 
             await self._ledger.commit(

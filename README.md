@@ -524,6 +524,12 @@ python -m emrag.eval.run_eval --mode full --min-faithfulness 0.85 --report var/e
 | `not_found_correct` | ≥ 0.90 | refusal behaviour on the unanswerable subset |
 | p95 latency | < 5 s | warm instance, end to end |
 
+Full mode answers with a 20 s deadline by default (`--deadline-ms`): it measures
+quality, and the free tiers need room to fall back between providers. Latency is
+still reported. An item that fails waits out quota exhaustion and is retried;
+any other error is recorded under `per_item` and counted in `errors`, so one
+bad item never loses the run.
+
 Start with retrieval. If recall is low, no prompt work will fix the answers and
 generation spend is wasted. `notebooks/03_eval_offline.ipynb` prints the failing
 questions and sweeps the gate threshold, which is the tuning that matters most.

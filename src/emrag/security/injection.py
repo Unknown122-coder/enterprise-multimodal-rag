@@ -80,8 +80,14 @@ def is_suspicious_question(question: str) -> str | None:
         return "prompt_disclosure_request"
     if re.search(r"ignore\s+(all\s+)?(previous|prior|your)\s+instructions", lowered):
         return "instruction_override_attempt"
-    if re.search(r"\b(other|another|different)\s+tenant('s)?\b", lowered) and re.search(
-        r"\b(document|data|file)s?\b", lowered
-    ):
+    # "another tenant's documents", and also a tenant named outright: "the demo
+    # tenant's files". Possessives that mean the caller's own tenant are left
+    # alone, since "my tenant's documents" is a legitimate question.
+    names_tenant = re.search(
+        r"\b(other|another|different)\s+tenant('s)?\b"
+        r"|\b(the|from|of|for)\s+(?!my\b|our\b|this\b|same\b|current\b|own\b)\w+\s+tenant('s)?\b",
+        lowered,
+    )
+    if names_tenant and re.search(r"\b(document|data|file)s?\b", lowered):
         return "cross_tenant_request"
     return None
