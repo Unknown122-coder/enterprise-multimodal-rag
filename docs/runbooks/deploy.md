@@ -94,9 +94,22 @@ than leaving its secrets unset, so the failure is deliberate.
 
 ## 6. Deploy
 
+With a GitHub remote:
+
 ```bash
 git tag v1.0.0 && git push --tags
 ```
+
+Without one, or to watch each step from your machine, fill `.env.deploy`
+(copy `.env.deploy.example`) and run:
+
+```bash
+python scripts/deploy_space.py --plan   # check settings, touch nothing
+python scripts/deploy_space.py          # repos, artifact sync, cloud collection, secrets, push, wait
+```
+
+It does steps 1, 4 and 6 of this runbook in one go and is idempotent, so rerun
+it after any failure. `--skip-store` redeploys code only.
 
 The deploy workflow pushes the tree to the Space, swaps in the Space README
 front matter, and polls `/healthz` for up to fifteen minutes. The first build is

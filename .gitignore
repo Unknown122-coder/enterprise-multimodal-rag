@@ -21,3 +21,4 @@ models/
 *.sqlite-journal
 .ipynb_checkpoints/
 .DS_Store
+.env.deploy
