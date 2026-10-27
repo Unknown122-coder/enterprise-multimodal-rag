@@ -19,6 +19,10 @@ Reads deployment-only settings from ``.env.deploy`` (gitignored; see
 6. push the working tree to the Space with the Space README front matter
 7. wait for /healthz, then /readyz, and print what to check
 
+Hugging Face now requires a PRO subscription for Docker Spaces on the free CPU
+tier (HTTP 402 on create). scripts/deploy_cloud_run.py is the free-tier
+alternative; it shares the dataset, artifact and vector steps with this file.
+
 Secrets are read from the environment and never printed. The Space is public
 because a private Space requires Hugging Face credentials on every request,
 which would collide with the API's own key header; the API itself refuses
@@ -133,13 +137,22 @@ def step_verify(env: dict[str, str]) -> str:
     return user
 
 
-def step_repos(env: dict[str, str]) -> None:
+def step_dataset(env: dict[str, str]) -> None:
+    """Create the private dataset repo that holds artifacts (shared by every host)."""
     from huggingface_hub import HfApi
 
+    say("2. dataset repository")
     api = HfApi(token=env["HF_TOKEN"])
-    say("2. repositories")
     api.create_repo(env["HF_DATASET_REPO"], repo_type="dataset", private=True, exist_ok=True)
     sys.stdout.write(f"   dataset {env['HF_DATASET_REPO']} (private) ready\n")
+
+
+def step_space(env: dict[str, str]) -> None:
+    """Create the Docker Space. Needs a PRO subscription since 2026 (HTTP 402 otherwise)."""
+    from huggingface_hub import HfApi
+
+    say("2b. Space")
+    api = HfApi(token=env["HF_TOKEN"])
     api.create_repo(
         env["HF_SPACE"], repo_type="space", space_sdk="docker", private=False, exist_ok=True
     )
@@ -337,7 +350,8 @@ def main() -> int:
         return 0
 
     step_verify(env)
-    step_repos(env)
+    step_dataset(env)
+    step_space(env)
     if not args.skip_store:
         step_artifacts(env)
         step_vectors(env)

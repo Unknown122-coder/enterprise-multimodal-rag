@@ -116,6 +116,31 @@ front matter, and polls `/healthz` for up to fifteen minutes. The first build is
 slow because the image downloads and bakes three ONNX models; later builds reuse
 the layer.
 
+## 6b. Deploy to Google Cloud Run instead
+
+Since 2026 Hugging Face requires a PRO subscription for Docker Spaces on the
+free CPU tier (`create_repo` returns HTTP 402). Cloud Run is the free-tier
+alternative: 2 million requests and 360,000 GB-seconds a month free on any
+account, scale to zero between requests. The container needs about 1.2 GB under
+load, so it runs with 2 GiB, one vCPU, and a cap of one instance.
+
+Needs a Google Cloud project with billing enabled (the free allowances apply to
+paid accounts too), the gcloud CLI logged in, and in `.env.deploy`:
+`GCP_PROJECT` (the project ID) and `GCP_REGION`.
+
+```bash
+python scripts/deploy_cloud_run.py --plan
+python scripts/deploy_cloud_run.py
+```
+
+It shares steps 1 to 4 with the Space script, then enables the APIs, pushes the
+locally built image to Artifact Registry and deploys. Expected cost outside the
+free allowances: image storage above 0.5 GB (about 0.15 USD a month) and
+outbound data outside North America (cents). Set a 1 USD budget alert.
+
+The first request after idle takes 20 to 30 s while the container starts; the
+keepalive workflow pings `/healthz` to keep that rare.
+
 ## 7. Confirm
 
 ```bash
