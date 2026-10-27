@@ -57,13 +57,13 @@ def parse_pdf(
 ) -> ParseResult:
     """Parse a PDF with Docling, raising ``ImportError`` if it is not installed."""
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableStructureOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     options = PdfPipelineOptions()
     options.do_ocr = needs_ocr
     options.do_table_structure = True
-    options.table_structure_options.do_cell_matching = True
+    options.table_structure_options = TableStructureOptions(do_cell_matching=True)
     options.generate_page_images = False
     options.generate_picture_images = True
     if needs_ocr:
@@ -137,20 +137,34 @@ def parse_pdf(
 def _apply_ocr_options(options: Any, engine: str) -> None:
     """Select an OCR backend, degrading to Docling's default if unavailable."""
     try:
+        full_page = _full_page_ocr_kwargs()
         if engine == "rapidocr":
             from docling.datamodel.pipeline_options import RapidOcrOptions
 
-            options.ocr_options = RapidOcrOptions(force_full_page_ocr=True)
+            options.ocr_options = RapidOcrOptions(**full_page)
         elif engine == "easyocr":
             from docling.datamodel.pipeline_options import EasyOcrOptions
 
-            options.ocr_options = EasyOcrOptions(force_full_page_ocr=True)
+            options.ocr_options = EasyOcrOptions(**full_page)
         elif engine == "tesseract":
             from docling.datamodel.pipeline_options import TesseractCliOcrOptions
 
-            options.ocr_options = TesseractCliOcrOptions(force_full_page_ocr=True)
+            options.ocr_options = TesseractCliOcrOptions(**full_page)
     except ImportError as exc:
         logger.warning("ingest.ocr_backend_unavailable", engine=engine, error=str(exc)[:160])
+
+
+def _full_page_ocr_kwargs() -> dict[str, Any]:
+    """OCR every page, not only regions the layout model flags as bitmaps.
+
+    Docling renamed this between the versions this project allows: older
+    releases take ``force_full_page_ocr=True``, 2.1xx takes ``mode=OcrMode.FULL_PAGE``.
+    """
+    try:
+        from docling.datamodel.pipeline_options import OcrMode
+    except ImportError:
+        return {"force_full_page_ocr": True}
+    return {"mode": OcrMode.FULL_PAGE}
 
 
 def _pages_from_docling(document: Any) -> list[PageInfo]:

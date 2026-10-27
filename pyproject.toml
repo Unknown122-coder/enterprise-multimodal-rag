@@ -66,8 +66,8 @@ dev = [
   "pytest-asyncio>=0.24,<0.25",
   "pytest-cov>=5.0,<6",
   "respx>=0.21,<0.22",
-  "ruff>=0.7,<0.9",
-  "mypy>=1.13,<2",
+  "ruff>=0.17,<0.18",
+  "mypy>=2.4,<3",
   "black>=24.10,<25",
   "types-PyYAML",
 ]
