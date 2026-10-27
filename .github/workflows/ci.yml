@@ -142,7 +142,11 @@ jobs:
             -e ARTIFACT_BACKEND=local \
             -e ARTIFACT_LOCAL_ROOT=/app/var/store \
             -e ALLOW_DEV_ANON=true \
+            -e GROQ_API_KEY=ci-smoke-test-not-a-real-key \
             -p 7860:7860 emrag:ci
+          # The key is a placeholder: readiness requires at least one routable
+          # LLM and the smoke test never calls a provider. Without it /readyz
+          # stays 503 and the probe loop below runs out.
           for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:7860/healthz > /dev/null; then
               echo "healthy after ${attempt}s"
