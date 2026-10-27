@@ -175,16 +175,18 @@ def step_enable(env: dict[str, str]) -> None:
 
 
 def step_image(env: dict[str, str], *, rebuild: bool) -> None:
+    """Build (layer-cached, so cheap when only code changed), tag and push the image."""
     say("6. image", image_name(env))
     local = "emrag:cloudrun"
-    cached = subprocess.run(["docker", "image", "inspect", local], capture_output=True)
-    if rebuild or cached.returncode != 0:
-        sys.stdout.write("   building (first time takes several minutes)...\n")
-        result = subprocess.run(["docker", "build", "-t", local, str(ROOT)], text=True)
-        if result.returncode != 0:
-            raise SystemExit("   docker build failed")
+    cmd = ["docker", "build", "-t", local, str(ROOT)]
+    if rebuild:
+        cmd.insert(2, "--no-cache")
+    sys.stdout.write("   building (model layers are cached after the first time)...\n")
+    result = subprocess.run(cmd, text=True)
+    if result.returncode != 0:
+        raise SystemExit("   docker build failed")
     subprocess.run(["docker", "tag", local, image_name(env)], check=True)
-    sys.stdout.write("   pushing 1.8 GB; a few minutes on a normal connection...\n")
+    sys.stdout.write("   pushing; only changed layers travel...\n")
     result = subprocess.run(["docker", "push", image_name(env)], text=True, env=docker_env())
     if result.returncode != 0:
         raise SystemExit("   docker push failed")
@@ -317,7 +319,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--plan", action="store_true", help="print the plan and exit")
     parser.add_argument("--skip-store", action="store_true", help="skip artifact and vector sync")
-    parser.add_argument("--rebuild", action="store_true", help="rebuild the image even if cached")
+    parser.add_argument("--rebuild", action="store_true", help="build with --no-cache")
     parser.add_argument("--wait", type=int, default=600, help="seconds to wait for /healthz")
     args = parser.parse_args()
 

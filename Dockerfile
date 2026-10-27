@@ -10,15 +10,16 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-COPY pyproject.toml README.md ./
-COPY src ./src
-RUN pip install --no-deps .
 
 # Pre-download every model weight and vocabulary into the image layer, so a cold
 # start never touches the network. The tiktoken vocabulary matters as much as the
 # ONNX models: fetching it at runtime costs about a minute on a free-tier host,
 # and failing to fetch it silently changes chunk boundaries and therefore chunk
 # ids. See the module docstring in emrag/core/tokens.py.
+#
+# This runs before the source is copied on purpose: the weights depend only on
+# requirements.txt, so a code change must not re-download 500 MB of models
+# (and fail the build when the hub hiccups, as it did on the second deploy).
 ENV FASTEMBED_CACHE_PATH=/opt/models \
     TIKTOKEN_CACHE_DIR=/opt/tiktoken
 RUN mkdir -p /opt/models /opt/tiktoken && python - <<'PY'
@@ -32,6 +33,9 @@ TextCrossEncoder("Xenova/ms-marco-MiniLM-L-6-v2", cache_dir="/opt/models")
 assert tiktoken.get_encoding("cl100k_base").encode("warm up"), "tokeniser not cached"
 print("models and tokeniser cached")
 PY
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-deps .
 
 FROM python:3.11-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
