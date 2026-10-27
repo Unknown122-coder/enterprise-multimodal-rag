@@ -66,11 +66,24 @@ IMAGE_REPO = "emrag"
 
 
 def gcloud_bin() -> str:
-    """The gcloud executable, which on Windows is a .cmd shim."""
+    """The gcloud executable, which on Windows is a .cmd shim.
+
+    Also checks the installer's default folders, because a shell opened before
+    the install does not see the PATH change.
+    """
     for name in ("gcloud", "gcloud.cmd"):
         found = shutil.which(name)
         if found:
             return found
+    candidates = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Cloud SDK",
+        Path(os.environ.get("ProgramFiles(x86)", "")) / "Google" / "Cloud SDK",
+        Path(os.environ.get("ProgramFiles", "")) / "Google" / "Cloud SDK",
+    ]
+    for base in candidates:
+        shim = base / "google-cloud-sdk" / "bin" / "gcloud.cmd"
+        if shim.exists():
+            return str(shim)
     raise SystemExit(
         "gcloud not found on PATH; install the Google Cloud CLI and reopen the terminal"
     )
