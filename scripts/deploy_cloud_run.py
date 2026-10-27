@@ -77,8 +77,8 @@ def gcloud_bin() -> str:
             return found
     candidates = [
         Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Cloud SDK",
-        Path(os.environ.get("ProgramFiles(x86)", "")) / "Google" / "Cloud SDK",
-        Path(os.environ.get("ProgramFiles", "")) / "Google" / "Cloud SDK",
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Google" / "Cloud SDK",
+        Path(os.environ.get("PROGRAMFILES", "")) / "Google" / "Cloud SDK",
     ]
     for base in candidates:
         shim = base / "google-cloud-sdk" / "bin" / "gcloud.cmd"
