@@ -1,6 +1,6 @@
 """Upload every PDF in a folder and report how each one was handled.
 
-    python scripts/upload_folder.py "D:\\docs" --key emk_akmal_... --tag finance --tag 2025
+    python scripts/upload_folder.py "D:\\docs" --key emk_acme_... --tag finance --tag 2025
 
 Each file is validated and ingested by the API. Short native PDFs are ingested
 inline and the script waits for them; longer or scanned ones are queued for the

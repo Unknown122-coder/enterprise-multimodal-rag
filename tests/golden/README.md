@@ -56,3 +56,15 @@ python -m emrag.eval.run_eval --mode full --min-faithfulness 0.85 --report var/e
 `v1.jsonl` as shipped is a 20-item starter written against the two fixture
 documents in `tests/fixtures/`. Replace it with your own corpus before trusting
 the numbers.
+
+## Per-corpus sets
+
+`v1.jsonl` stays the fixture set so CI has something stable to run. A set built
+against a real tenant's documents lives beside it, named for the tenant:
+
+| file | corpus | items |
+|------|--------|-------|
+| `akmal.v1.jsonl` | tenant `akmal`: a 36-page mixed lecture deck (text, OCR, tables, figures) and a job description, built 2026-10-27 | 32 answerable + 6 adversarial |
+
+Run it with `--golden tests/golden/akmal.v1.jsonl`. Its `expected_doc_ids` are
+content-addressed, so the same files ingested elsewhere get the same ids.
