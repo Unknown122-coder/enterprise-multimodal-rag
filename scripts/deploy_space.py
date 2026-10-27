@@ -49,16 +49,29 @@ SPACE_PREFIXES = ("artifacts", "manifest")
 REQUIRED = ("HF_TOKEN", "HF_SPACE", "HF_DATASET_REPO", "QDRANT_URL", "QDRANT_API_KEY")
 
 
+def _read_env_file(path: Path, into: dict[str, str]) -> None:
+    """Parse KEY=value lines (comments and blanks ignored) into ``into``."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        value = value.split("  #")[0].strip().strip('"').strip("'")
+        if value:
+            into[key.strip()] = value
+
+
 def load_deploy_env() -> dict[str, str]:
-    """Merge .env.deploy over the process environment (deploy file wins)."""
+    """Process environment, then .env, then .env.deploy; later sources win.
+
+    The provider keys live in .env (the app loads it through pydantic); the
+    deployment-only values live in .env.deploy. Both are needed here.
+    """
     env = dict(os.environ)
-    if DEPLOY_ENV.exists():
-        for line in DEPLOY_ENV.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            key, _, value = stripped.partition("=")
-            env[key.strip()] = value.split("  #")[0].strip().strip('"').strip("'")
+    _read_env_file(ROOT / ".env", env)
+    _read_env_file(DEPLOY_ENV, env)
     return env
 
 
