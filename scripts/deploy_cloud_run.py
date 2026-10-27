@@ -89,6 +89,21 @@ def gcloud_bin() -> str:
     )
 
 
+def docker_env() -> dict[str, str]:
+    """Environment for docker commands with the SDK's bin folder on PATH.
+
+    `gcloud auth configure-docker` registers docker-credential-gcloud as the
+    credential helper, and docker must be able to find that executable. A shell
+    opened before the SDK install cannot, so the push fails with "executable
+    file not found".
+    """
+    env = dict(os.environ)
+    sdk_bin = str(Path(gcloud_bin()).parent)
+    if sdk_bin not in env.get("PATH", ""):
+        env["PATH"] = sdk_bin + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def gcloud(*args: str, env: dict[str, str], check: bool = True, quiet: bool = False) -> str:
     """Run one gcloud command and return its stdout."""
     cmd = [gcloud_bin(), *args, "--project", env["GCP_PROJECT"]]
@@ -170,7 +185,7 @@ def step_image(env: dict[str, str], *, rebuild: bool) -> None:
             raise SystemExit("   docker build failed")
     subprocess.run(["docker", "tag", local, image_name(env)], check=True)
     sys.stdout.write("   pushing 1.8 GB; a few minutes on a normal connection...\n")
-    result = subprocess.run(["docker", "push", image_name(env)], text=True)
+    result = subprocess.run(["docker", "push", image_name(env)], text=True, env=docker_env())
     if result.returncode != 0:
         raise SystemExit("   docker push failed")
     sys.stdout.write("   pushed\n")
