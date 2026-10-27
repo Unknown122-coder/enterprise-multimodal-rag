@@ -144,7 +144,11 @@ class TestGeminiProvider:
             "candidates": [
                 {"content": {"parts": [{"text": "gemini says"}]}, "finishReason": "STOP"}
             ],
-            "usageMetadata": {"promptTokenCount": 9, "candidatesTokenCount": 4},
+            "usageMetadata": {
+                "promptTokenCount": 9,
+                "candidatesTokenCount": 4,
+                "thoughtsTokenCount": 3,
+            },
         }
         route = respx.post(GEMINI_URL).mock(return_value=httpx.Response(200, json=payload))
         provider = GeminiProvider("key")
@@ -154,6 +158,7 @@ class TestGeminiProvider:
         await provider.aclose()
         assert response.text == "gemini says"
         assert response.prompt_tokens == 9
+        assert response.completion_tokens == 7  # 4 visible + 3 thinking tokens
         assert route.called
 
     @respx.mock

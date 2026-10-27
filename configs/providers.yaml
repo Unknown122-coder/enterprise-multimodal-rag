@@ -50,6 +50,8 @@ models:
     model: gemini-3.5-flash-lite
     tiers: [fast, rewrite, repair, judge, vision]
     priority: 30
+    # Leads the vision tier: 500 requests a day, no thinking tokens, and it
+    # captioned three figures per request without truncation on 2026-10-27.
     limits: { rpm: 15, tpm: 250000, rpd: 500, tpd: null }
     capabilities: { json_schema: true, vision: true, context: 1048576 }
 
@@ -88,12 +90,17 @@ models:
     provider: gemini
     model: gemini-3.5-flash
     tiers: [quality, vision]
-    priority: 20
+    priority: 60
     # The console has no 3.5 Flash row: calls to it are metered under
     # "Gemini 3.6 Flash", which allows only 20 requests a day. A fallback for
-    # the quality tier and for figure captioning, not a volume path.
+    # the quality tier and for figure captioning, not a volume path, hence the
+    # lowest priority in the catalogue.
     limits: { rpm: 5, tpm: 250000, rpd: 20, tpd: null }
     capabilities: { json_schema: true, vision: true, context: 1048576 }
+    # This model thinks by default and the thoughts count against
+    # maxOutputTokens: measured 2026-10-27, about 550 thought tokens per
+    # three-figure caption batch, which truncated the JSON. Low turns it off.
+    params: { thinkingConfig: { thinkingLevel: low } }
 
 routing:
   # Reserve a fraction of each daily budget so a batch job cannot starve

@@ -30,7 +30,7 @@ generation:
 figures:
   min_pixels: 14400          # 120x120
   max_aspect_ratio: 8.0
-  batch_size: 4
+  batch_size: 3
   max_per_document: 400
 
 ocr:

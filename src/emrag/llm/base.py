@@ -43,6 +43,9 @@ class LLMRequest(StrictModel):
     schema_name: str = "response"
     images: list[ImagePart] = Field(default_factory=list)
     stop: list[str] = Field(default_factory=list)
+    # Overrides the router's default request timeout. Vision calls carrying
+    # several images routinely exceed the 30 s that suits a text answer.
+    timeout_s: float | None = Field(default=None, gt=0, le=300)
 
     def estimated_prompt_tokens(self) -> int:
         """Rough prompt size, used for quota reservation before the call."""

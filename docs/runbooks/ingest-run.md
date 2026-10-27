@@ -6,7 +6,7 @@
 
 - Confirm the vector store is reachable: `python scripts/bootstrap_store.py`.
 - Check the vision budget: `GET /v1/usage` as an admin. Captioning uses about one
-  request per four figures. If `rpd_used` is already near its limit, either wait
+  request per three figures, more when a batch is retried image by image. If `rpd_used` is already near its limit, either wait
   or accept the local vision fallback on Colab.
 
 ## Steps
@@ -46,4 +46,5 @@ curl -X POST https://<host>/v1/internal/hf-webhook -H "X-Webhook-Secret: $HF_WEB
 | job stuck in `processing` | re-run the drain cell; the claim is replaced and the upsert is idempotent |
 | `status: ready_degraded` | read `quality_report.degraded_reasons` on the document; usually a parser fallback or an un-OCR'd page |
 | vision quota exhausted | figures get a minimal description instead of a caption; re-ingest those documents tomorrow for full captions |
+| `N figure(s) indexed without a vision description` in `degraded_reasons` | the vision model returned nothing usable for those figures, even one image at a time (check `ingest.caption_failed` for the finish reason); the figures are indexed on their captions. Re-ingest once the vision tier has quota |
 | vector count below chunk count | `python scripts/upsert_artifacts.py --tenant all --verify` |

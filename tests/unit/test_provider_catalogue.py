@@ -80,3 +80,22 @@ class TestCatalogue:
         assert 0.0 <= routing["daily_reserve_ratio"] < 1.0
         assert routing["max_attempts_per_tier"] >= 1
         assert routing["request_timeout_s"] > routing["connect_timeout_s"]
+
+
+class TestVisionTier:
+    """Figure captioning must not burn the 20-a-day model by default."""
+
+    def test_flash_lite_leads_the_vision_tier(self, catalogue: dict) -> None:
+        # Measured 2026-10-27: gemini-3.5-flash spends ~550 thinking tokens on a
+        # three-figure batch and allows 20 requests a day; flash-lite allows 500
+        # and does not think. The router orders by priority, so flash-lite must win.
+        vision = sorted(
+            (_parse_spec(e) for e in catalogue["models"] if "vision" in e.get("tiers", [])),
+            key=lambda spec: spec.priority,
+        )
+        assert vision, "no vision model in the catalogue"
+        assert vision[0].key == "gemini/flash-lite"
+
+    def test_thinking_models_have_thinking_turned_down(self, catalogue: dict) -> None:
+        flash = next(e for e in catalogue["models"] if e["key"] == "gemini/flash")
+        assert flash["params"]["thinkingConfig"]["thinkingLevel"] == "low"

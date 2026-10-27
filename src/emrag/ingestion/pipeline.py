@@ -184,6 +184,15 @@ class IngestionPipeline:
             report = quality.evaluate(
                 chunks, parsed.pages or pages, parser_degraded_reasons=parsed.degraded_reasons
             )
+            # A figure the vision model never described is indexed on its
+            # caption alone; the document still works but should say so, so a
+            # re-ingest can be scheduled once the vision tier has quota again.
+            uncaptioned = sum(1 for d in descriptions if d.fallback and not d.decorative)
+            if uncaptioned:
+                report.degraded_reasons.append(
+                    f"{uncaptioned} figure(s) indexed without a vision description"
+                )
+                report.passed = False
 
             # Replace, do not merge. Upserts are idempotent for identical output,
             # but a re-ingest that produces fewer chunks (a changed chunker, or
@@ -325,7 +334,7 @@ class IngestionPipeline:
             survivors,
             parsed.images,
             context_by_key=_nearby_text(parsed.elements, survivors),
-            batch_size=int(figure_cfg.get("batch_size", 4)),
+            batch_size=int(figure_cfg.get("batch_size", 3)),
         )
 
     async def _embed(self, chunks: list[Chunk]) -> list[DenseSparse]:

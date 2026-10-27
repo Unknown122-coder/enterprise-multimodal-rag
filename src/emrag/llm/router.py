@@ -153,7 +153,7 @@ class LLMRouter:
 
             attempts += 1
             provider = self._providers[spec.provider]
-            timeout_s = self._timeout_for(deadline_ms, started)
+            timeout_s = self._timeout_for(deadline_ms, started, request.timeout_s)
             try:
                 response = await provider.complete(spec, request, timeout_s=timeout_s)
             except RateLimited as exc:
@@ -223,7 +223,7 @@ class LLMRouter:
                 retry_hint = max(retry_hint, decision.retry_after_s)
                 continue
             provider = self._providers[spec.provider]
-            timeout_s = self._timeout_for(deadline_ms, started)
+            timeout_s = self._timeout_for(deadline_ms, started, request.timeout_s)
             await self._ledger.commit(
                 spec.key, request.estimated_prompt_tokens(), request.max_tokens, reserved=est
             )
@@ -241,11 +241,14 @@ class LLMRouter:
         for provider in self._providers.values():
             await provider.aclose()
 
-    def _timeout_for(self, deadline_ms: int | None, started: float) -> float:
+    def _timeout_for(
+        self, deadline_ms: int | None, started: float, override_s: float | None = None
+    ) -> float:
+        base = override_s if override_s is not None else self._config.request_timeout_s
         if deadline_ms is None:
-            return self._config.request_timeout_s
+            return base
         remaining = (deadline_ms / 1000.0) - (time.monotonic() - started)
-        return max(1.0, min(self._config.request_timeout_s, remaining))
+        return max(1.0, min(base, remaining))
 
 
 def _parse_spec(entry: dict[str, Any]) -> ModelSpec:

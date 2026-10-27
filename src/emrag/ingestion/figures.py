@@ -103,6 +103,9 @@ class FigureDescription:
     ocr_text: str = ""
     insights: list[str] = field(default_factory=list)
     decorative: bool = False
+    # True when the vision model gave nothing usable and the description
+    # is only the caption (or a placeholder). Counted in the quality report.
+    fallback: bool = False
     image_hash: str = ""
 
     def to_text(self) -> str:
@@ -185,68 +188,43 @@ def filter_figures(
     return survivors
 
 
+VISION_TIMEOUT_S = 90.0
+DEFAULT_CAPTION_TOKENS = 2500
+
+
 async def describe_figures(
     router: LLMRouter,
     figures: list[Element],
     images: dict[str, bytes],
     *,
     context_by_key: dict[str, str] | None = None,
-    batch_size: int = 4,
-    max_tokens: int = 900,
+    batch_size: int = 3,
+    max_tokens: int = DEFAULT_CAPTION_TOKENS,
 ) -> list[FigureDescription]:
     """Describe figures with the vision tier, batching several per request.
 
-    On total vision failure each figure still yields a minimal description, so a
-    figure chunk is never silently lost.
+    A batch that fails is retried one image at a time, because the usual
+    failure is a truncated JSON reply when several detailed descriptions do
+    not fit the output budget: on the first real document two of three batches
+    failed that way and six of ten figures lost their descriptions. A single
+    image almost always fits. Only after that does a figure fall back to its
+    caption, flagged with ``fallback=True`` so the pipeline can report it.
     """
     context_by_key = context_by_key or {}
     out: list[FigureDescription] = []
+    fallbacks = 0
 
     for start in range(0, len(figures), batch_size):
         batch = figures[start : start + batch_size]
-        parts: list[ImagePart] = []
-        lines: list[str] = []
-        for offset, element in enumerate(batch):
-            data = images.get(element.image_bytes_ref or "")
-            if not data:
-                continue
-            mime = _mime_for(data)
-            parts.append(ImagePart(mime=mime, data_b64=base64.b64encode(data).decode("ascii")))
-            context = context_by_key.get(element.image_bytes_ref or "", "")
-            caption = element.text or element.table_caption or ""
-            lines.append(
-                f"Image {offset}: page {element.page}."
-                + (f" Caption: {caption}" if caption else "")
-                + (f" Nearby text: {context[:400]}" if context else "")
-            )
-        if not parts:
-            continue
-
-        request = LLMRequest(
-            messages=[
-                LLMMessage(role="system", content=_SYSTEM_PROMPT),
-                LLMMessage(
-                    role="user",
-                    content=(
-                        "Describe each attached image. Use the index given below for each.\n"
-                        + "\n".join(lines)
-                    ),
-                ),
-            ],
-            images=parts,
-            max_tokens=max_tokens,
-            json_schema=CAPTION_SCHEMA,
-            schema_name="figure_captions",
-        )
-
-        described: dict[int, dict[str, Any]] = {}
-        try:
-            response = await router.complete("vision", request, require_vision=True)
-            payload = json.loads(response.text or "{}")
-            for item in payload.get("figures", []):
-                described[int(item.get("index", -1))] = item
-        except Exception as exc:  # noqa: BLE001 - captioning must never abort ingestion
-            logger.warning("ingest.caption_failed", error=str(exc)[:240], batch=len(batch))
+        described = await _caption_batch(router, batch, images, context_by_key, max_tokens)
+        if described is None and len(batch) > 1:
+            logger.info("ingest.caption_retry_single", figures=len(batch))
+            described = {}
+            for offset, element in enumerate(batch):
+                single = await _caption_batch(router, [element], images, context_by_key, max_tokens)
+                if single and 0 in single:
+                    described[offset] = single[0]
+        described = described or {}
 
         for offset, element in enumerate(batch):
             key = element.image_bytes_ref or ""
@@ -270,6 +248,8 @@ async def describe_figures(
                 image_hash=hashlib.sha256(data).hexdigest() if data else "",
             )
             if not description.description:
+                fallbacks += 1
+                description.fallback = True
                 description.description = (
                     element.text
                     or element.table_caption
@@ -278,8 +258,76 @@ async def describe_figures(
             description.decorative = _is_decorative(description)
             out.append(description)
 
-    logger.info("ingest.figures_described", figures=len(out))
+    logger.info("ingest.figures_described", figures=len(out), fallbacks=fallbacks)
     return out
+
+
+async def _caption_batch(
+    router: LLMRouter,
+    batch: list[Element],
+    images: dict[str, bytes],
+    context_by_key: dict[str, str],
+    max_tokens: int,
+) -> dict[int, dict[str, Any]] | None:
+    """Caption one batch. Returns index -> item, or ``None`` when the call failed."""
+    parts: list[ImagePart] = []
+    lines: list[str] = []
+    for offset, element in enumerate(batch):
+        data = images.get(element.image_bytes_ref or "")
+        if not data:
+            continue
+        parts.append(
+            ImagePart(mime=_mime_for(data), data_b64=base64.b64encode(data).decode("ascii"))
+        )
+        context = context_by_key.get(element.image_bytes_ref or "", "")
+        caption = element.text or element.table_caption or ""
+        lines.append(
+            f"Image {offset}: page {element.page}."
+            + (f" Caption: {caption}" if caption else "")
+            + (f" Nearby text: {context[:400]}" if context else "")
+        )
+    if not parts:
+        return {}
+
+    request = LLMRequest(
+        messages=[
+            LLMMessage(role="system", content=_SYSTEM_PROMPT),
+            LLMMessage(
+                role="user",
+                content=(
+                    "Describe each attached image. Use the index given below for each.\n"
+                    + "\n".join(lines)
+                ),
+            ),
+        ],
+        images=parts,
+        max_tokens=max_tokens,
+        json_schema=CAPTION_SCHEMA,
+        schema_name="figure_captions",
+        timeout_s=VISION_TIMEOUT_S,
+    )
+    try:
+        response = await router.complete("vision", request, require_vision=True)
+    except Exception as exc:  # noqa: BLE001 - captioning must never abort ingestion
+        logger.warning("ingest.caption_failed", error=str(exc)[:240], batch=len(batch))
+        return None
+    try:
+        payload = json.loads(response.text or "{}")
+    except ValueError as exc:
+        logger.warning(
+            "ingest.caption_failed",
+            error=f"malformed JSON: {str(exc)[:200]}",
+            batch=len(batch),
+            model=response.model,
+            finish_reason=response.finish_reason,
+            completion_tokens=response.completion_tokens,
+        )
+        return None
+    return {
+        int(item.get("index", -1)): item
+        for item in payload.get("figures", [])
+        if isinstance(item, dict)
+    }
 
 
 def _is_decorative(description: FigureDescription) -> bool:

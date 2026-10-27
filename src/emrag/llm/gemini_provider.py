@@ -67,7 +67,10 @@ class GeminiProvider(LLMProvider):
             provider=self.name,
             model=spec.model,
             prompt_tokens=int(usage.get("promptTokenCount", 0)),
-            completion_tokens=int(usage.get("candidatesTokenCount", 0)),
+            # Thinking tokens count against the output budget and the quota,
+            # so they belong in completion_tokens even though no text came of them.
+            completion_tokens=int(usage.get("candidatesTokenCount", 0))
+            + int(usage.get("thoughtsTokenCount", 0)),
             latency_ms=latency_ms,
             finish_reason=str(candidates[0].get("finishReason", "STOP")).lower(),
         )
