@@ -15,12 +15,17 @@ Usage::
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
+# importlib rather than two import statements: whether mypy sees the second
+# import as a redefinition depends on which PyMuPDF modules exist in the
+# environment, so a "type: ignore" there is needed on one machine and flagged
+# as unused on another. This form needs none.
 try:  # PyMuPDF >= 1.25
-    import pymupdf as _pymupdf
+    _pymupdf = importlib.import_module("pymupdf")
 except ImportError:  # pragma: no cover - PyMuPDF < 1.25
-    import fitz as _pymupdf  # type: ignore[no-redef]
+    _pymupdf = importlib.import_module("fitz")
 
 fitz: Any = _pymupdf
 
