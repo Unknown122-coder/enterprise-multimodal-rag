@@ -151,6 +151,15 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:7860/healthz
+          # /readyz is 503 until the baked models are loaded (about 20 s on a
+          # cold runner); that is what lets platform startup probes work.
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:7860/readyz > /dev/null; then
+              echo "ready after ${attempt}s"
+              break
+            fi
+            sleep 1
+          done
           curl -fsS http://127.0.0.1:7860/readyz
           curl -fsS http://127.0.0.1:7860/v1/meta
 
