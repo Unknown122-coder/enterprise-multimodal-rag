@@ -24,7 +24,9 @@ async def ping_api(url: str, timeout_s: float) -> bool:
     async with httpx.AsyncClient(timeout=timeout_s, follow_redirects=True) as client:
         for attempt in range(3):
             try:
-                response = await client.get(f"{url.rstrip('/')}/healthz")
+                # /readyz, not /healthz: Google's front end answers /healthz on
+                # Cloud Run with its own 404 and never reaches the container.
+                response = await client.get(f"{url.rstrip('/')}/readyz")
                 if response.status_code == 200:
                     sys.stdout.write(f"api ok after {attempt + 1} attempt(s)\n")
                     return True

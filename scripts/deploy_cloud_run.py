@@ -251,6 +251,12 @@ def step_deploy(env: dict[str, str]) -> str:
             "--timeout",
             "300",
             "--allow-unauthenticated",
+            # Keep the container in "starting" (full CPU, boost on) until the
+            # models are warm: /readyz is 503 until then. Without this the
+            # warm-up ran on throttled CPU and took ten minutes.
+            "--startup-probe",
+            "httpGet.path=/readyz,httpGet.port=7860,initialDelaySeconds=10,"
+            "periodSeconds=10,timeoutSeconds=10,failureThreshold=60",
             "--env-vars-file",
             str(env_file),
             env=env,
@@ -273,38 +279,37 @@ def step_deploy(env: dict[str, str]) -> str:
 
 
 def step_wait(url: str, timeout_s: int) -> None:
-    say("8. wait for the service", f"{url}/healthz")
+    # /readyz, never /healthz: Google's front end answers /healthz itself with a
+    # 404 and the request never reaches the container.
+    say("8. wait for the service", f"{url}/readyz (first request waits for the warm-up)")
     deadline = time.monotonic() + timeout_s
+    last_checks: dict[str, bool] | None = None
     while time.monotonic() < deadline:
         try:
-            if httpx.get(url + "/healthz", timeout=30).status_code == 200:
+            r = httpx.get(url + "/readyz", timeout=120)
+            body = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
+            if r.status_code == 200 and body.get("ready"):
+                sys.stdout.write(f"\n   /readyz ready; detail={json.dumps(body.get('detail'))}\n")
                 break
+            if body.get("checks") != last_checks:
+                last_checks = body.get("checks")
+                sys.stdout.write(f"\n   /readyz {r.status_code} checks={json.dumps(last_checks)}")
         except httpx.HTTPError:
             pass
         sys.stdout.write(".")
         sys.stdout.flush()
         time.sleep(10)
     else:
-        raise SystemExit("   service did not become healthy; check Cloud Run logs in the console")
-    sys.stdout.write("\n   /healthz 200\n")
-    for _ in range(30):
-        try:
-            r = httpx.get(url + "/readyz", timeout=30)
-            if r.status_code == 200 and r.json().get("ready"):
-                body = r.json()
-                sys.stdout.write(f"   /readyz ready; detail={json.dumps(body.get('detail'))}\n")
-                break
-            sys.stdout.write(f"   /readyz checks={json.dumps(r.json().get('checks'))}\n")
-        except httpx.HTTPError:
-            pass
-        time.sleep(10)
-    else:
-        sys.stdout.write("   /readyz not ready yet; see the checks above\n")
+        raise SystemExit("\n   service did not become ready; check Cloud Run logs in the console")
     sys.stdout.write(
         "\nNext:\n"
         f"  curl -sS {url}/v1/meta\n"
         f"  register the dataset webhook: {url}/v1/internal/hf-webhook with X-Webhook-Secret\n"
         "  set a budget alert at 1 USD in the Cloud console\n"
+        "  never dump the service spec (gcloud run services describe) into a log: it\n"
+        "  prints every secret in clear\n"
     )
 
 

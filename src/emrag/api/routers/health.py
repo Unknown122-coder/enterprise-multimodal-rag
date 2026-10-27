@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from emrag import INGEST_VERSION, SCHEMA_VERSION, __version__
 from emrag.api.deps import StateDep
@@ -29,9 +29,21 @@ async def healthz() -> Health:
     return Health(ok=True, version=__version__)
 
 
-@router.get("/readyz", response_model=Readiness, summary="Readiness probe")
-async def readyz(state: StateDep) -> Readiness:
-    """Report whether models are warm, the vector store is reachable and the registry synced."""
+@router.get(
+    "/readyz",
+    response_model=Readiness,
+    summary="Readiness probe",
+    responses={503: {"model": Readiness, "description": "Not ready yet; body says why"}},
+)
+async def readyz(state: StateDep, response: Response) -> Readiness:
+    """Report whether models are warm, the vector store is reachable and the registry synced.
+
+    Returns 503 with the same body while any check fails. Cloud Run's startup
+    probe needs that: with a 200 it would mark the container started at once
+    and throttle its CPU, and the model warm-up then took ten minutes instead
+    of one. Google's front end also swallows ``/healthz`` with its own 404, so
+    this is the probe every external monitor should use.
+    """
     store_health = await state.store.health()
     registry_stats = await state.registry.stats()
     checks = {
@@ -53,7 +65,10 @@ async def readyz(state: StateDep) -> Readiness:
     }
     if store_health.detail:
         detail["store_detail"] = store_health.detail
-    return Readiness(ready=all(checks.values()), checks=checks, detail=detail)
+    ready = all(checks.values())
+    if not ready:
+        response.status_code = 503
+    return Readiness(ready=ready, checks=checks, detail=detail)
 
 
 @router.get("/v1/meta", response_model=MetaResponse, summary="Deployment metadata")

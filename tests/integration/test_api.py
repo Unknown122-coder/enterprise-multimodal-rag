@@ -39,6 +39,20 @@ class TestOps:
         body = client.get("/readyz").json()
         assert set(body["checks"]) == {"models", "tokenizer", "store", "registry", "llm"}
 
+    def test_readyz_is_503_until_warm(self, client: Any, app_state: Any) -> None:
+        # Cloud Run's startup probe keys off the status code: a 200 while the
+        # models are still loading marks the container started and throttles
+        # its CPU, which turned a one-minute warm-up into ten on the first deploy.
+        app_state.mark_warm(ready=False)
+        try:
+            response = client.get("/readyz")
+            assert response.status_code == 503
+            assert response.json()["ready"] is False
+            assert response.json()["checks"]["models"] is False
+        finally:
+            app_state.mark_warm(ready=True)
+        assert client.get("/readyz").status_code == 200
+
     def test_readyz_surfaces_the_tokenizer_and_artifact_root(self, client: Any) -> None:
         # Both are silent failure modes: a fallback tokeniser changes chunk
         # boundaries, and a mis-set artifact root looks healthy while writing

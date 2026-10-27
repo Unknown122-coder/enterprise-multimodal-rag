@@ -138,8 +138,19 @@ locally built image to Artifact Registry and deploys. Expected cost outside the
 free allowances: image storage above 0.5 GB (about 0.15 USD a month) and
 outbound data outside North America (cents). Set a 1 USD budget alert.
 
-The first request after idle takes 20 to 30 s while the container starts; the
-keepalive workflow pings `/healthz` to keep that rare.
+Two Cloud Run facts learned on the first deploy:
+
+- Google's front end answers `/healthz` with its own 404 page and never forwards
+  it. Probe `/readyz` from outside; `/healthz` is only for the container's own
+  health check.
+- CPU is throttled while no request is in flight, so a background warm-up took
+  ten minutes. The service is deployed with a startup probe on `/readyz`, which
+  returns 503 until the models are warm, so the container keeps full CPU until
+  then and the first request waits about a minute instead.
+
+The first request after idle still pays that start; the keepalive workflow pings
+`/readyz` to keep it rare. Do not print the service spec
+(`gcloud run services describe`) into logs: it shows every secret in clear.
 
 ## 7. Confirm
 
