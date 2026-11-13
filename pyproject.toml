@@ -34,22 +34,21 @@ tracing = [
   "opentelemetry-exporter-otlp-proto-http>=1.27,<2",
 ]
 api = [
-  "fastapi>=0.115,<0.116",
-  "uvicorn[standard]>=0.32,<0.33",
+  "fastapi>=0.162,<0.163",
+  "uvicorn[standard]>=0.54,<0.55",
   "python-multipart>=0.0.12,<0.1",
   "slowapi>=0.1.9,<0.2",
   "PyJWT[crypto]>=2.9,<3",
-  "argon2-cffi>=23.1,<24",
+  "argon2-cffi>=25.1,<26",
   "filetype>=1.2,<2",
   "qdrant-client>=1.12,<2",
-  "fastembed>=0.4.2,<0.5",
-  "PyMuPDF>=1.24,<1.26",
-  "pikepdf>=9.3,<10",
-  # fastembed 0.4.x requires pillow<11; widening this breaks the image build.
-  "pillow>=10.3,<11",
-  "huggingface-hub>=0.26,<1",
-  "pyarrow>=17,<19",
-  "pandas>=2.2,<3",
+  "fastembed>=0.9.1,<1",
+  "PyMuPDF>=2.0,<2.1",
+  "pikepdf>=10.17,<11",
+  "pillow>=13.0,<14",
+  "huggingface-hub>=1.33,<2",
+  "pyarrow>=26,<27",
+  "pandas>=3.1,<4",
 ]
 ingest = [
   "emrag[api]",
@@ -59,7 +58,7 @@ ingest = [
 ]
 pinecone = ["pinecone>=5.3,<6"]
 ui = ["streamlit>=1.39,<2"]
-eval = ["pandas>=2.2,<3", "tabulate>=0.9,<1"]
+eval = ["pandas>=3.1,<4", "tabulate>=0.9,<1"]
 dev = [
   "emrag[api,eval]",
   "pytest>=9.1,<10",
